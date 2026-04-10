@@ -35,3 +35,22 @@ body {
   margin: 0;
   padding: 0;
 }
+
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(108,99,255,0.25);
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(108,99,255,0.45);
+}
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(108,99,255,0.25) transparent;
+}

@@ -48,6 +48,12 @@ function coerceOriTurn(parsed: unknown): OriTurn {
   }
 }
 
+const SESSION_START_USER: ChatMessage = {
+  role: 'user',
+  content:
+    'The user just opened a new architecture session. There is no prior conversation. Respond with your JSON only: follow turn 1 in your question sequence — briefly greet in character, then ask what kind of product they are building.',
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
@@ -60,11 +66,22 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    if (!process.env.ANTHROPIC_API_KEY?.trim()) {
+      return NextResponse.json(
+        { error: 'Server missing ANTHROPIC_API_KEY' },
+        { status: 503 }
+      )
+    }
+
+    // Anthropic requires at least one message; Meet Ori starts with an empty array.
+    const forModel =
+      messages.length === 0 ? [SESSION_START_USER] : messages
+
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 1024,
       system: ORI_SYSTEM_PROMPT,
-      messages: messages.map((m) => ({
+      messages: forModel.map((m) => ({
         role: m.role,
         content: m.content,
       })),

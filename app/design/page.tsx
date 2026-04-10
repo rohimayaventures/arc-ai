@@ -64,8 +64,17 @@ export default function DesignPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages: [] }),
       })
-      if (!res.ok) throw new Error(`API ${res.status}`)
-      const turn: OriTurn = await res.json()
+      const payload: unknown = await res.json()
+      if (!res.ok) {
+        const errMsg =
+          typeof (payload as { error?: string }).error === 'string'
+            ? (payload as { error: string }).error
+            : `Ori could not start (${res.status}). Check ANTHROPIC_API_KEY and try again.`
+        setDisplayMessages([{ role: 'assistant', content: errMsg }])
+        setOriState('idle')
+        return
+      }
+      const turn = payload as OriTurn
       if (turn.message) {
         setOriState('speaking')
         setDisplayMessages([{ role: 'assistant', content: turn.message }])
@@ -103,8 +112,20 @@ export default function DesignPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages: newMessages }),
       })
-      if (!res.ok) throw new Error(`API ${res.status}`)
-      const turn: OriTurn = await res.json()
+      const payload: unknown = await res.json()
+      if (!res.ok) {
+        const errMsg =
+          typeof (payload as { error?: string }).error === 'string'
+            ? (payload as { error: string }).error
+            : `Ori could not respond (${res.status}). Please try again.`
+        setDisplayMessages((prev) => [
+          ...prev,
+          { role: 'assistant', content: errMsg },
+        ])
+        setOriState('listening')
+        return
+      }
+      const turn = payload as OriTurn
       setOriState('speaking')
       const assistantMsg: ChatMessage = { role: 'assistant', content: turn.message }
       const updatedMessages = [...newMessages, assistantMsg]
@@ -175,6 +196,45 @@ export default function DesignPage() {
   const progressColors = ['#6C63FF', '#B8924A', '#2DD4BF', '#F472B6']
   const currentProgressColor = progressColors[Math.max(0, sectionsComplete - 1)] || '#6C63FF'
 
+  function exportMarkdown(): string {
+    const lines: string[] = ['# Conversation Architecture', '']
+    if (architecture.intentTaxonomy?.length) {
+      lines.push('## Intent Taxonomy', '')
+      architecture.intentTaxonomy.forEach((i) => lines.push(`- ${i}`))
+      lines.push('')
+    }
+    if (architecture.escalationFlow?.length) {
+      lines.push('## Escalation Flow', '')
+      architecture.escalationFlow.forEach((e) => lines.push(`- **${e.trigger}** → ${e.destination}${e.condition ? ` (${e.condition})` : ''}`))
+      lines.push('')
+    }
+    if (architecture.entitySchema?.length) {
+      lines.push('## Entity Schema', '')
+      architecture.entitySchema.forEach((e) => lines.push(`- \`${e.entity}\` · ${e.type}${e.required ? ' · required' : ''}`))
+      lines.push('')
+    }
+    if (architecture.toneGuide?.length) {
+      lines.push('## Tone Guide', '')
+      architecture.toneGuide.forEach((t) => lines.push(`- ${t}`))
+      lines.push('')
+    }
+    return lines.join('\n')
+  }
+
+  function copyMarkdown() {
+    navigator.clipboard.writeText(exportMarkdown())
+  }
+
+  function downloadMarkdown() {
+    const blob = new Blob([exportMarkdown()], { type: 'text/markdown' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'conversation-architecture.md'
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: '#0A0C12', overflow: 'hidden', fontFamily: 'var(--arc-font)', color: 'var(--arc-text)', position: 'relative' }}>
 
@@ -186,7 +246,6 @@ export default function DesignPage() {
           <ArcMark size={22} />
           <span style={{ fontSize: 15, fontWeight: 500, color: '#F0F2F8', letterSpacing: -0.3 }}>Arc</span>
         </button>
-
         <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
           {PILL_LABELS.map((label, i) => {
             const ps = pillState(i)
@@ -197,7 +256,6 @@ export default function DesignPage() {
             )
           })}
         </div>
-
         <span style={{ fontSize: 10, color: '#555', fontFamily: 'var(--arc-mono)' }}>
           {turnNumber > 0 ? `turn ${turnNumber}` : 'ready'}
         </span>
@@ -206,19 +264,27 @@ export default function DesignPage() {
       <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 200px 1fr', overflow: 'hidden', position: 'relative', zIndex: 1 }}>
 
         <div style={{ display: 'flex', flexDirection: 'column', borderRight: '1px solid rgba(108,99,255,0.08)', overflow: 'hidden' }}>
-          <div style={{ padding: '10px 14px', borderBottom: '1px solid rgba(108,99,255,0.08)', fontSize: 11, color: '#555', textTransform: 'uppercase' as const, letterSpacing: '0.07em', fontFamily: 'var(--arc-mono)', flexShrink: 0 }}>
+          <div style={{ padding: '10px 14px', borderBottom: '1px solid rgba(108,99,255,0.08)', fontSize: 10, color: '#555', textTransform: 'uppercase' as const, letterSpacing: '0.08em', fontFamily: 'var(--arc-mono)', flexShrink: 0 }}>
             Conversation
           </div>
 
           <div style={{ flex: 1, overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
             {!sessionStarted && (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 16, textAlign: 'center', padding: '0 24px' }}>
-                <p style={{ color: '#6B7280', fontSize: 13, lineHeight: 1.65, maxWidth: 280 }}>
-                  Ori will interview you about your product and build your conversation architecture in real time.
-                </p>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 20, textAlign: 'center', padding: '0 24px' }}>
+                <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'rgba(108,99,255,0.1)', border: '1px solid rgba(108,99,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <ArcMark size={22} />
+                </div>
+                <div>
+                  <p style={{ color: 'rgba(228,232,242,0.85)', fontSize: 14, lineHeight: 1.65, maxWidth: 260, margin: '0 0 6px' }}>
+                    Ori will interview you about your product and build your conversation architecture in real time.
+                  </p>
+                  <p style={{ color: '#555', fontSize: 11, fontFamily: 'var(--arc-mono)', margin: 0 }}>
+                    One question per turn.
+                  </p>
+                </div>
                 <button
                   onClick={startSession}
-                  style={{ background: '#6C63FF', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 24px', fontSize: 13, fontFamily: 'var(--arc-font)', fontWeight: 500, cursor: 'pointer', boxShadow: '0 4px 20px rgba(108,99,255,0.35)' }}
+                  style={{ background: '#6C63FF', color: '#fff', border: 'none', borderRadius: 8, padding: '11px 28px', fontSize: 13, fontFamily: 'var(--arc-font)', fontWeight: 500, cursor: 'pointer', boxShadow: '0 4px 20px rgba(108,99,255,0.35)', letterSpacing: -0.2 }}
                 >
                   Meet Ori
                 </button>
@@ -227,10 +293,15 @@ export default function DesignPage() {
 
             {displayMessages.map((msg, i) => (
               <div key={i} style={{ display: 'flex', gap: 8, flexDirection: msg.role === 'user' ? 'row-reverse' : 'row', alignItems: 'flex-start' }}>
-                <div style={{ width: 24, height: 24, borderRadius: 5, background: msg.role === 'assistant' ? '#6C63FF' : 'rgba(28,35,51,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 600, color: msg.role === 'assistant' ? '#fff' : '#6B7280', flexShrink: 0, border: msg.role === 'user' ? '1px solid rgba(108,99,255,0.15)' : 'none' }}>
-                  {msg.role === 'assistant' ? 'O' : 'Y'}
+                <div style={{ width: 24, height: 24, borderRadius: 5, background: msg.role === 'assistant' ? '#6C63FF' : 'rgba(108,99,255,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 600, color: msg.role === 'assistant' ? '#fff' : '#A5A0FF', flexShrink: 0, border: msg.role === 'user' ? '1px solid rgba(108,99,255,0.2)' : 'none' }}>
+                  {msg.role === 'assistant' ? 'O' : (
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                      <circle cx="5" cy="3.5" r="2" fill="#A5A0FF"/>
+                      <path d="M1 9c0-2.2 1.8-4 4-4s4 1.8 4 4" stroke="#A5A0FF" strokeWidth="1.2" strokeLinecap="round" fill="none"/>
+                    </svg>
+                  )}
                 </div>
-                <div style={{ fontSize: 13, lineHeight: 1.6, padding: '9px 13px', borderRadius: msg.role === 'assistant' ? '2px 10px 10px 10px' : '10px 2px 10px 10px', maxWidth: '82%', color: msg.role === 'assistant' ? 'rgba(228,232,242,0.95)' : 'rgba(228,232,242,0.9)', background: msg.role === 'assistant' ? 'rgba(28,35,51,0.85)' : 'rgba(108,99,255,0.1)', borderLeft: msg.role === 'assistant' ? '2px solid #6C63FF' : 'none', border: msg.role === 'user' ? '1px solid rgba(108,99,255,0.2)' : undefined, backdropFilter: 'blur(8px)' }}>
+                <div style={{ fontSize: 13, lineHeight: 1.6, padding: '9px 13px', borderRadius: msg.role === 'assistant' ? '2px 10px 10px 10px' : '10px 2px 10px 10px', maxWidth: '82%', color: 'rgba(228,232,242,0.95)', background: msg.role === 'assistant' ? 'rgba(28,35,51,0.85)' : 'rgba(108,99,255,0.1)', borderLeft: msg.role === 'assistant' ? '2px solid #6C63FF' : 'none', border: msg.role === 'user' ? '1px solid rgba(108,99,255,0.2)' : undefined, backdropFilter: 'blur(8px)' }}>
                   {msg.content}
                 </div>
               </div>
@@ -247,18 +318,40 @@ export default function DesignPage() {
               </div>
             )}
 
-            {sessionComplete && shareUrl && (
-              <div style={{ background: 'rgba(52,211,153,0.08)', border: '1px solid rgba(52,211,153,0.22)', borderRadius: 10, padding: '12px 14px', marginTop: 8 }}>
-                <p style={{ fontSize: 12, color: '#34D399', margin: '0 0 8px', fontWeight: 500 }}>Architecture complete</p>
-                <a href={shareUrl} style={{ fontSize: 11, color: '#A5A0FF', fontFamily: 'var(--arc-mono)', textDecoration: 'none' }}>
-                  View shareable architecture →
-                </a>
+            {sessionComplete && (
+              <div style={{ background: 'rgba(52,211,153,0.07)', border: '1px solid rgba(52,211,153,0.2)', borderRadius: 10, padding: '14px 16px', marginTop: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+                  <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#34D399' }} />
+                  <p style={{ fontSize: 12, color: '#34D399', margin: 0, fontWeight: 500 }}>Architecture complete</p>
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button
+                    onClick={copyMarkdown}
+                    style={{ fontSize: 11, color: '#A5A0FF', background: 'rgba(108,99,255,0.1)', border: '1px solid rgba(108,99,255,0.2)', borderRadius: 6, padding: '6px 12px', cursor: 'pointer', fontFamily: 'var(--arc-mono)' }}
+                  >
+                    Copy markdown
+                  </button>
+                  <button
+                    onClick={downloadMarkdown}
+                    style={{ fontSize: 11, color: '#A5A0FF', background: 'rgba(108,99,255,0.1)', border: '1px solid rgba(108,99,255,0.2)', borderRadius: 6, padding: '6px 12px', cursor: 'pointer', fontFamily: 'var(--arc-mono)' }}
+                  >
+                    Download .md
+                  </button>
+                  {shareUrl && (
+                    <a
+                      href={shareUrl}
+                      style={{ fontSize: 11, color: '#5EEAD4', background: 'rgba(45,212,191,0.08)', border: '1px solid rgba(45,212,191,0.2)', borderRadius: 6, padding: '6px 12px', textDecoration: 'none', fontFamily: 'var(--arc-mono)' }}
+                    >
+                      Share link →
+                    </a>
+                  )}
+                </div>
               </div>
             )}
             <div ref={messagesEndRef} />
           </div>
 
-          <div style={{ padding: '12px 14px', borderTop: '1px solid rgba(108,99,255,0.08)', display: 'flex', gap: 8, flexShrink: 0, background: 'rgba(10,12,18,0.6)', backdropFilter: 'blur(8px)' }}>
+          <div style={{ padding: '10px 12px', borderTop: '1px solid rgba(108,99,255,0.08)', display: 'flex', gap: 8, flexShrink: 0, background: 'rgba(10,12,18,0.6)', backdropFilter: 'blur(8px)' }}>
             <input
               ref={inputRef}
               value={inputValue}
@@ -266,7 +359,9 @@ export default function DesignPage() {
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() } }}
               disabled={isLoading || sessionComplete || !sessionStarted}
               placeholder={!sessionStarted ? 'Click Meet Ori to begin...' : sessionComplete ? 'Architecture complete' : 'Reply to Ori...'}
-              style={{ flex: 1, background: 'rgba(28,35,51,0.7)', border: '1px solid rgba(108,99,255,0.15)', borderRadius: 7, padding: '8px 12px', fontSize: 13, color: 'rgba(228,232,242,0.95)', fontFamily: 'var(--arc-font)', outline: 'none', opacity: sessionComplete ? 0.5 : 1, backdropFilter: 'blur(8px)' }}
+              style={{ flex: 1, background: 'rgba(28,35,51,0.7)', border: '1px solid rgba(108,99,255,0.15)', borderRadius: 7, padding: '8px 12px', fontSize: 13, color: 'rgba(228,232,242,0.95)', fontFamily: 'var(--arc-font)', outline: 'none', transition: 'border-color 0.2s ease, box-shadow 0.2s ease', opacity: sessionComplete ? 0.5 : 1 }}
+              onFocus={(e) => { e.target.style.borderColor = 'rgba(108,99,255,0.5)'; e.target.style.boxShadow = '0 0 0 3px rgba(108,99,255,0.12)' }}
+              onBlur={(e) => { e.target.style.borderColor = 'rgba(108,99,255,0.15)'; e.target.style.boxShadow = 'none' }}
             />
             <button
               onClick={sendMessage}
@@ -280,10 +375,10 @@ export default function DesignPage() {
 
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', background: '#07090F', borderRight: '1px solid rgba(108,99,255,0.08)', position: 'relative', overflow: 'hidden' }}>
           <div style={{ position: 'absolute', inset: 0, background: STATE_GLOW[oriState], transition: 'background 0.8s ease', pointerEvents: 'none' }} />
-          <div style={{ position: 'absolute', inset: 0, borderRadius: 0, boxShadow: `inset 0 0 60px ${STATE_RING[oriState]}`, transition: 'box-shadow 0.8s ease', pointerEvents: 'none' }} />
+          <div style={{ position: 'absolute', inset: 0, boxShadow: `inset 0 0 60px ${STATE_RING[oriState]}`, transition: 'box-shadow 0.8s ease', pointerEvents: 'none' }} />
 
-          <span style={{ fontSize: 9, color: '#444', textTransform: 'uppercase' as const, letterSpacing: '0.1em', fontFamily: 'var(--arc-mono)', padding: '12px 0 0', position: 'relative', zIndex: 1, transition: 'color 0.4s ease' }}>
-            {oriState}
+          <span style={{ fontSize: 9, color: oriState === 'idle' ? '#333' : '#666', textTransform: 'uppercase' as const, letterSpacing: '0.1em', fontFamily: 'var(--arc-mono)', padding: '12px 0 0', position: 'relative', zIndex: 1, transition: 'color 0.4s ease' }}>
+            {sessionStarted ? oriState : ''}
           </span>
 
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 12, position: 'relative', zIndex: 1 }}>
@@ -291,9 +386,9 @@ export default function DesignPage() {
           </div>
 
           <div style={{ padding: '0 12px 14px', textAlign: 'center', position: 'relative', zIndex: 1 }}>
-            <p style={{ fontSize: 11, color: '#A5A0FF', fontFamily: 'var(--arc-mono)', margin: '0 0 8px' }}>Ori</p>
+            <p style={{ fontSize: 10, color: '#555', fontFamily: 'var(--arc-mono)', margin: '0 0 8px', letterSpacing: '0.06em' }}>Ori</p>
             {sessionStarted && (
-              <div style={{ height: 2, width: 120, background: 'rgba(108,99,255,0.12)', borderRadius: 2, overflow: 'hidden', margin: '0 auto' }}>
+              <div style={{ height: 2, width: 120, background: 'rgba(108,99,255,0.1)', borderRadius: 2, overflow: 'hidden', margin: '0 auto' }}>
                 <div style={{ height: '100%', width: `${progressPercent}%`, background: `linear-gradient(90deg, #6C63FF, ${currentProgressColor})`, borderRadius: 2, transition: 'width 0.8s ease, background 0.5s ease' }} />
               </div>
             )}
