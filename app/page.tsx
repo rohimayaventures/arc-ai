@@ -1,26 +1,13 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 
-function ArcMark({ size = 20 }: { size?: number }) {
+function ArcMark({ size = 24 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 28 28" fill="none">
-      <path
-        d="M4 24 L14 4 L24 24"
-        stroke="#6C63FF"
-        strokeWidth="2.2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        fill="none"
-      />
-      <path
-        d="M8 17 Q14 11 20 17"
-        stroke="#A5A0FF"
-        strokeWidth="1.4"
-        strokeLinecap="round"
-        fill="none"
-      />
+      <path d="M4 24 L14 4 L24 24" stroke="#6C63FF" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M8 17 Q14 11 20 17" stroke="#A5A0FF" strokeWidth="1.4" strokeLinecap="round" fill="none" />
       <circle cx="14" cy="14" r="1.5" fill="#6C63FF" opacity="0.7" />
     </svg>
   )
@@ -28,176 +15,262 @@ function ArcMark({ size = 20 }: { size?: number }) {
 
 export default function LandingPage() {
   const router = useRouter()
-  const oriCanvasRef = useRef<HTMLCanvasElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const oriSectionRef = useRef<HTMLDivElement>(null)
   const rafRef = useRef<number>(0)
-  const progressRef = useRef(0)
+  const buildProgressRef = useRef(0)
+  const mouseRef = useRef({ x: -1, y: -1 })
+  const smoothMouseRef = useRef({ x: -1, y: -1 })
+  const [buildLabel, setBuildLabel] = useState('scroll to build her')
+  const [buildProgress, setBuildProgress] = useState(0)
+
+  useEffect(() => {
+    function onMouse(e: MouseEvent) {
+      mouseRef.current = { x: e.clientX, y: e.clientY }
+    }
+    window.addEventListener('mousemove', onMouse)
+    return () => window.removeEventListener('mousemove', onMouse)
+  }, [])
 
   useEffect(() => {
     function onScroll() {
-      const maxScroll = document.body.scrollHeight - window.innerHeight
-      progressRef.current = maxScroll > 0
-        ? Math.min(1, window.scrollY / maxScroll)
-        : 0
+      const section = oriSectionRef.current
+      if (!section) return
+      const rect = section.getBoundingClientRect()
+      const sectionH = section.offsetHeight
+      const windowH = window.innerHeight
+      const scrolled = Math.max(0, -rect.top)
+      const total = sectionH - windowH
+      const progress = total > 0 ? Math.min(1, Math.max(0, scrolled / total)) : 0
+      buildProgressRef.current = progress
+      setBuildProgress(progress)
+
+      if (progress < 0.08) setBuildLabel('scroll to build her')
+      else if (progress < 0.25) setBuildLabel('signal emerging...')
+      else if (progress < 0.45) setBuildLabel('threads forming...')
+      else if (progress < 0.62) setBuildLabel('wave ring stabilizing...')
+      else if (progress < 0.82) setBuildLabel('core locking in...')
+      else setBuildLabel('Ori')
     }
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => window.removeEventListener('scroll', onScroll)
   }, [])
 
   useEffect(() => {
-    const canvas = oriCanvasRef.current
+    const canvas = canvasRef.current
     if (!canvas) return
     const canvasCtx = canvas.getContext('2d')
     if (!canvasCtx) return
     const ctx: CanvasRenderingContext2D = canvasCtx
 
-    const W = 720
-    const H = 720
-    const cx = W / 2
-    const cy = H / 2
+    function resize() {
+      if (!canvas) return
+      canvas.width = window.innerWidth
+      canvas.height = window.innerHeight
+    }
+    resize()
+    window.addEventListener('resize', resize)
+
     let t = 0
     const NODES = 7
-    const ORBITERS = 65
+    const ORBITERS = 70
 
-    const particles = Array.from({ length: 260 }, () => ({
-      x: Math.random() * W,
-      y: Math.random() * H,
-      r: 0.3 + Math.random() * 0.9,
+    const particles = Array.from({ length: 300 }, () => ({
+      xr: Math.random(),
+      yr: Math.random(),
+      r: 0.4 + Math.random() * 1.2,
       a: 0.06 + Math.random() * 0.22,
     }))
 
     const orbiters = Array.from({ length: ORBITERS }, () => ({
       angle: Math.random() * Math.PI * 2,
       scatterAngle: Math.random() * Math.PI * 2,
-      scatterRadius: 260 + Math.random() * 160,
-      radius: W * 0.1 + Math.random() * W * 0.26,
-      speed:
-        (0.001 + Math.random() * 0.002) * (Math.random() > 0.5 ? 1 : -1),
+      scatterR: 0.3 + Math.random() * 0.25,
+      radius: 0.07 + Math.random() * 0.2,
+      speed: (0.001 + Math.random() * 0.002) * (Math.random() > 0.5 ? 1 : -1),
       phase: Math.random() * Math.PI * 2,
-      size: 0.9 + Math.random() * 1.8,
+      size: 0.9 + Math.random() * 1.9,
     }))
 
     function ease(x: number) {
       return x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2
     }
 
+    function oriPos() {
+      return {
+        x: canvas!.width / 2,
+        y: canvas!.height * 0.52,
+      }
+    }
+
+    function baseR() {
+      return Math.min(canvas!.width, canvas!.height) * 0.18
+    }
+
     function getNodes(time: number) {
+      const { x: cx, y: cy } = oriPos()
+      const r0 = baseR()
       return Array.from({ length: NODES }, (_, i) => {
         const a = (i / NODES) * Math.PI * 2 + time * 0.15
-        const r =
-          W * 0.175 + Math.sin(time * 0.9 + i * 1.7) * W * 0.032
-        return {
-          x: cx + Math.cos(a) * r,
-          y: cy + Math.sin(a) * r,
-        }
+        const r = r0 + Math.sin(time * 0.9 + i * 1.7) * r0 * 0.18
+        return { x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r }
       })
     }
 
     function draw() {
+      const W = canvas!.width
+      const H = canvas!.height
       ctx.clearRect(0, 0, W, H)
       t += 0.007
-      const rp = ease(progressRef.current)
+
+      const rp = ease(buildProgressRef.current)
+      const { x: ocx, y: ocy } = oriPos()
+      const r0 = baseR()
       const nodes = getNodes(t)
+
+      smoothMouseRef.current.x +=
+        (mouseRef.current.x - smoothMouseRef.current.x) * 0.07
+      smoothMouseRef.current.y +=
+        (mouseRef.current.y - smoothMouseRef.current.y) * 0.07
+
+      const bgGrad = ctx.createRadialGradient(ocx, ocy, 0, ocx, ocy, W * 0.55)
+      bgGrad.addColorStop(0, 'rgba(108,99,255,0.10)')
+      bgGrad.addColorStop(0.5, 'rgba(108,99,255,0.04)')
+      bgGrad.addColorStop(1, 'rgba(108,99,255,0)')
+      ctx.fillStyle = bgGrad
+      ctx.fillRect(0, 0, W, H)
 
       particles.forEach((p) => {
         ctx.fillStyle = `rgba(108,99,255,${p.a})`
         ctx.beginPath()
-        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2)
+        ctx.arc(p.xr * W, p.yr * H, p.r, 0, Math.PI * 2)
         ctx.fill()
       })
 
-      const beamGrad = ctx.createLinearGradient(cx, 0, cx, cy * 0.9)
-      beamGrad.addColorStop(0, 'rgba(108,99,255,0)')
-      beamGrad.addColorStop(0.4, 'rgba(108,99,255,0.25)')
-      beamGrad.addColorStop(0.85, 'rgba(165,160,255,0.5)')
-      beamGrad.addColorStop(1, 'rgba(108,99,255,0.05)')
-      ctx.fillStyle = beamGrad
-      ctx.fillRect(cx - 18, 0, 36, cy * 0.9)
+      const mx = smoothMouseRef.current.x
+      const my = smoothMouseRef.current.y
 
-      const coreGlow = ctx.createRadialGradient(cx, cy, 0, cx, cy, W * 0.18)
-      coreGlow.addColorStop(0, 'rgba(108,99,255,0.14)')
-      coreGlow.addColorStop(1, 'rgba(108,99,255,0)')
-      ctx.fillStyle = coreGlow
-      ctx.beginPath()
-      ctx.arc(cx, cy, W * 0.18, 0, Math.PI * 2)
-      ctx.fill()
+      if (mx > 0 && my > 0) {
+        const dx = ocx - mx
+        const dy = ocy - my
+        const dist = Math.sqrt(dx * dx + dy * dy)
 
-      if (rp > 0.1) {
-        const ra = Math.min(1, (rp - 0.1) * 8)
-        for (let r = 0; r < 7; r++) {
-          const radius = W * 0.046 + r * W * 0.063
-          const alpha = (0.055 + 0.025 * Math.sin(t * 1.2 - r * 0.5)) * ra
-          ctx.strokeStyle = `rgba(108,99,255,${alpha})`
-          ctx.lineWidth = 0.5
+        if (dist > 20) {
+          const cursorGlow = ctx.createRadialGradient(mx, my, 0, mx, my, 70)
+          cursorGlow.addColorStop(0, 'rgba(165,160,255,0.22)')
+          cursorGlow.addColorStop(0.4, 'rgba(108,99,255,0.08)')
+          cursorGlow.addColorStop(1, 'rgba(108,99,255,0)')
+          ctx.fillStyle = cursorGlow
           ctx.beginPath()
-          ctx.arc(cx, cy, radius, 0, Math.PI * 2)
+          ctx.arc(mx, my, 70, 0, Math.PI * 2)
+          ctx.fill()
+
+          const steps = 80
+          const angle = Math.atan2(dy, dx)
+          for (let i = 0; i < steps; i++) {
+            const prog = i / steps
+            const bx = mx + dx * prog
+            const by = my + dy * prog
+            const width = 38 * (1 - prog * 0.65)
+            const alpha =
+              0.055 *
+              Math.sin(prog * Math.PI) *
+              (0.5 + 0.5 * Math.sin(t * 2.5 + prog * 10))
+            ctx.fillStyle = `rgba(108,99,255,${alpha})`
+            ctx.beginPath()
+            ctx.ellipse(bx, by, width * 0.5, width * 0.14, angle, 0, Math.PI * 2)
+            ctx.fill()
+          }
+
+          const beamGrad = ctx.createLinearGradient(mx, my, ocx, ocy)
+          beamGrad.addColorStop(0, 'rgba(165,160,255,0.0)')
+          beamGrad.addColorStop(0.15, 'rgba(108,99,255,0.4)')
+          beamGrad.addColorStop(0.55, 'rgba(184,146,74,0.35)')
+          beamGrad.addColorStop(0.85, 'rgba(45,212,191,0.42)')
+          beamGrad.addColorStop(1, 'rgba(45,212,191,0.05)')
+          ctx.strokeStyle = beamGrad
+          ctx.lineWidth = 1.4
+          ctx.beginPath()
+          ctx.moveTo(mx, my)
+          ctx.lineTo(ocx, ocy)
           ctx.stroke()
         }
       }
 
-      if (rp > 0.28) {
-        const ta = Math.min(1, (rp - 0.28) * 6)
+      if (rp > 0.06) {
+        const ra = Math.min(1, (rp - 0.06) * 10)
+        for (let i = 0; i < 7; i++) {
+          const radius = r0 * 0.28 + i * r0 * 0.38
+          const alpha = (0.055 + 0.022 * Math.sin(t * 1.2 - i * 0.5)) * ra
+          ctx.strokeStyle = `rgba(108,99,255,${alpha})`
+          ctx.lineWidth = 0.5
+          ctx.beginPath()
+          ctx.arc(ocx, ocy, radius, 0, Math.PI * 2)
+          ctx.stroke()
+        }
+      }
+
+      if (rp > 0.22) {
+        const ta = Math.min(1, (rp - 0.22) * 6)
         for (let i = 0; i < NODES; i++) {
           for (let j = i + 2; j < NODES; j++) {
-            const alpha =
-              (0.1 + 0.045 * Math.sin(t * 0.6 + i + j)) * ta
+            const alpha = (0.1 + 0.045 * Math.sin(t * 0.6 + i + j)) * ta
             ctx.strokeStyle = `rgba(108,99,255,${alpha})`
-            ctx.lineWidth = 0.7
+            ctx.lineWidth = 0.65
             ctx.beginPath()
             ctx.moveTo(nodes[i].x, nodes[i].y)
-            const mx =
+            const mx2 =
               (nodes[i].x + nodes[j].x) / 2 +
-              Math.sin(t * 0.8 + i * j * 0.3) * W * 0.08
-            const my =
+              Math.sin(t * 0.8 + i * j * 0.3) * r0 * 0.55
+            const my2 =
               (nodes[i].y + nodes[j].y) / 2 +
-              Math.cos(t * 0.8 + i * j * 0.3) * W * 0.08
-            ctx.quadraticCurveTo(mx, my, nodes[j].x, nodes[j].y)
+              Math.cos(t * 0.8 + i * j * 0.3) * r0 * 0.55
+            ctx.quadraticCurveTo(mx2, my2, nodes[j].x, nodes[j].y)
             ctx.stroke()
           }
         }
       }
 
-      if (rp > 0.48) {
-        const wa = Math.min(1, (rp - 0.48) * 7)
-        const wR = W * 0.205
+      if (rp > 0.42) {
+        const wa = Math.min(1, (rp - 0.42) * 7)
+        const wR = r0 * 1.18
         ctx.beginPath()
         for (let i = 0; i <= 200; i++) {
           const angle = (i / 200) * Math.PI * 2
           const w =
-            Math.sin(angle * 4 + t * 1.8) * 13 +
-            Math.sin(angle * 6 - t * 1.2) * 6 +
-            Math.sin(angle * 9 + t * 0.6) * 3
+            Math.sin(angle * 4 + t * 1.8) * r0 * 0.09 +
+            Math.sin(angle * 6 - t * 1.2) * r0 * 0.045 +
+            Math.sin(angle * 9 + t * 0.6) * r0 * 0.022
           const r = wR + w
-          const px = cx + Math.cos(angle) * r
-          const py = cy + Math.sin(angle) * r
+          const px = ocx + Math.cos(angle) * r
+          const py = ocy + Math.sin(angle) * r
           i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py)
         }
-        ctx.strokeStyle = `rgba(108,99,255,${0.65 * wa})`
+        ctx.strokeStyle = `rgba(108,99,255,${0.62 * wa})`
         ctx.lineWidth = 1.1
         ctx.stroke()
       }
 
-      if (rp > 0.22) {
-        const pa = Math.min(1, (rp - 0.22) * 5)
+      if (rp > 0.18) {
+        const pa = Math.min(1, (rp - 0.18) * 5)
         for (let i = 0; i < NODES; i++) {
           const prog = (t * 0.32 + i / NODES) % 1
           const from = nodes[i]
           const to = nodes[(i + 3) % NODES]
-          const mx =
-            (from.x + to.x) / 2 + Math.sin(t + i) * W * 0.075
-          const my =
-            (from.y + to.y) / 2 + Math.cos(t + i) * W * 0.075
-          const x =
+          const mx3 = (from.x + to.x) / 2 + Math.sin(t + i) * r0 * 0.52
+          const my3 = (from.y + to.y) / 2 + Math.cos(t + i) * r0 * 0.52
+          const px =
             (1 - prog) * (1 - prog) * from.x +
-            2 * (1 - prog) * prog * mx +
+            2 * (1 - prog) * prog * mx3 +
             prog * prog * to.x
-          const y =
+          const py =
             (1 - prog) * (1 - prog) * from.y +
-            2 * (1 - prog) * prog * my +
+            2 * (1 - prog) * prog * my3 +
             prog * prog * to.y
           const alpha = Math.sin(prog * Math.PI) * 0.95 * pa
           ctx.fillStyle = `rgba(165,160,255,${alpha})`
           ctx.beginPath()
-          ctx.arc(x, y, 2.2, 0, Math.PI * 2)
+          ctx.arc(px, py, 2.2, 0, Math.PI * 2)
           ctx.fill()
         }
       }
@@ -205,31 +278,31 @@ export default function LandingPage() {
       orbiters.forEach((ob) => {
         ob.angle += ob.speed
         const targetX =
-          cx +
+          ocx +
           Math.cos(ob.angle) *
-            (ob.radius + Math.sin(t * 1.6 + ob.phase) * W * 0.03)
+            (ob.radius * W + Math.sin(t * 1.6 + ob.phase) * r0 * 0.22)
         const targetY =
-          cy +
+          ocy +
           Math.sin(ob.angle) *
-            (ob.radius + Math.sin(t * 1.6 + ob.phase) * W * 0.03)
+            (ob.radius * W + Math.sin(t * 1.6 + ob.phase) * r0 * 0.22)
         const scatterX =
-          cx + Math.cos(ob.scatterAngle) * ob.scatterRadius
+          ocx + Math.cos(ob.scatterAngle) * ob.scatterR * W
         const scatterY =
-          cy + Math.sin(ob.scatterAngle) * ob.scatterRadius
-        const eased = ease(Math.min(1, progressRef.current * 3.2))
-        const x = scatterX + (targetX - scatterX) * eased
-        const y = scatterY + (targetY - scatterY) * eased
+          ocy + Math.sin(ob.scatterAngle) * ob.scatterR * H
+        const ep = ease(Math.min(1, buildProgressRef.current * 3.5))
+        const px = scatterX + (targetX - scatterX) * ep
+        const py = scatterY + (targetY - scatterY) * ep
         const alpha =
           (0.12 + 0.28 * Math.abs(Math.sin(t * 1.2 + ob.phase))) *
-          Math.min(1, progressRef.current * 5)
+          Math.min(1, buildProgressRef.current * 6)
         ctx.fillStyle = `rgba(108,99,255,${alpha})`
         ctx.beginPath()
-        ctx.arc(x, y, ob.size * 0.65, 0, Math.PI * 2)
+        ctx.arc(px, py, ob.size * 0.65, 0, Math.PI * 2)
         ctx.fill()
       })
 
-      if (rp > 0.42) {
-        const na = Math.min(1, (rp - 0.42) * 6)
+      if (rp > 0.38) {
+        const na = Math.min(1, (rp - 0.38) * 7)
         for (let i = 0; i < NODES; i++) {
           const pulse = 0.5 + 0.5 * Math.sin(t * 1.8 + i * 1.1)
           ctx.strokeStyle = `rgba(108,99,255,${pulse * 0.55 * na})`
@@ -244,18 +317,17 @@ export default function LandingPage() {
         }
       }
 
-      if (rp > 0.65) {
-        const ca = Math.min(1, (rp - 0.65) * 6)
-        const coreR =
-          (W * 0.042 + Math.sin(t * 2.5) * W * 0.009) * ca
-        for (let r = 4; r >= 1; r--) {
-          ctx.fillStyle = `rgba(108,99,255,${(0.08 - r * 0.016) * ca})`
+      if (rp > 0.62) {
+        const ca = Math.min(1, (rp - 0.62) * 7)
+        const coreR = (r0 * 0.24 + Math.sin(t * 2.5) * r0 * 0.05) * ca
+        for (let i = 4; i >= 1; i--) {
+          ctx.fillStyle = `rgba(108,99,255,${(0.08 - i * 0.015) * ca})`
           ctx.beginPath()
-          ctx.arc(cx, cy, coreR + r * W * 0.018, 0, Math.PI * 2)
+          ctx.arc(ocx, ocy, coreR + i * r0 * 0.12, 0, Math.PI * 2)
           ctx.fill()
         }
         ctx.save()
-        ctx.translate(cx, cy)
+        ctx.translate(ocx, ocy)
         ctx.rotate(t * 0.55)
         ctx.strokeStyle = `rgba(165,160,255,${ca * 0.92})`
         ctx.lineWidth = 1.4
@@ -270,11 +342,11 @@ export default function LandingPage() {
         ctx.restore()
         ctx.fillStyle = `rgba(165,160,255,${ca * 0.96})`
         ctx.beginPath()
-        ctx.arc(cx, cy, W * 0.018 * ca, 0, Math.PI * 2)
+        ctx.arc(ocx, ocy, r0 * 0.1 * ca, 0, Math.PI * 2)
         ctx.fill()
         ctx.fillStyle = `rgba(255,255,255,${ca})`
         ctx.beginPath()
-        ctx.arc(cx, cy, W * 0.008 * ca, 0, Math.PI * 2)
+        ctx.arc(ocx, ocy, r0 * 0.045 * ca, 0, Math.PI * 2)
         ctx.fill()
       }
 
@@ -282,7 +354,9 @@ export default function LandingPage() {
     }
 
     draw()
+
     return () => {
+      window.removeEventListener('resize', resize)
       if (rafRef.current) cancelAnimationFrame(rafRef.current)
     }
   }, [])
@@ -291,14 +365,26 @@ export default function LandingPage() {
     {
       label: 'One question per turn',
       body: 'Ori never asks two things at once. This discipline is the entire design argument — a conversation is not a form with a chat wrapper.',
+      border: '#6C63FF',
+      bg: 'rgba(108,99,255,0.06)',
+      borderColor: 'rgba(108,99,255,0.12)',
+      labelColor: '#A5A0FF',
     },
     {
       label: 'Architecture builds live',
       body: 'Intent taxonomy, escalation flow, entity schema, and tone guide populate in real time as you talk. You watch your system take shape.',
+      border: '#B8924A',
+      bg: 'rgba(184,146,74,0.06)',
+      borderColor: 'rgba(184,146,74,0.12)',
+      labelColor: '#D4AE78',
     },
     {
       label: 'Shareable output',
-      body: 'Every completed session generates a permanent URL. Share your architecture with your team before you write a single prompt.',
+      body: 'Every completed session generates a permanent URL. Share your conversation architecture with your team before you write a single prompt.',
+      border: '#2DD4BF',
+      bg: 'rgba(45,212,191,0.05)',
+      borderColor: 'rgba(45,212,191,0.11)',
+      labelColor: '#5EEAD4',
     },
   ]
 
@@ -308,16 +394,28 @@ export default function LandingPage() {
         background: '#0A0C12',
         fontFamily: 'var(--arc-font)',
         color: 'var(--arc-text)',
-        position: 'relative',
         overflowX: 'hidden',
       }}
     >
+      <canvas
+        ref={canvasRef}
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          pointerEvents: 'none',
+          zIndex: 0,
+        }}
+      />
+
       <div
         style={{
           position: 'fixed',
           inset: 0,
           background:
-            'radial-gradient(ellipse 80% 70% at 50% 52%, rgba(108,99,255,0.16) 0%, rgba(60,52,140,0.07) 45%, transparent 72%)',
+            'radial-gradient(ellipse 75% 65% at 50% 52%, rgba(108,99,255,0.13) 0%, rgba(60,52,140,0.06) 50%, transparent 75%)',
           pointerEvents: 'none',
           zIndex: 0,
         }}
@@ -328,7 +426,7 @@ export default function LandingPage() {
           position: 'fixed',
           inset: 0,
           backgroundImage:
-            'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 512 512\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.75\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23n)\'/%3E%3C/svg%3E")',
+            "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")",
           backgroundSize: '256px 256px',
           opacity: 0.028,
           pointerEvents: 'none',
@@ -336,26 +434,7 @@ export default function LandingPage() {
         }}
       />
 
-      <div
-        style={{
-          position: 'fixed',
-          inset: 0,
-          zIndex: 1,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          pointerEvents: 'none',
-        }}
-      >
-        <canvas
-          ref={oriCanvasRef}
-          width={720}
-          height={720}
-          style={{ opacity: 0.75 }}
-        />
-      </div>
-
-      <div style={{ position: 'relative', zIndex: 2 }}>
+      <div style={{ position: 'relative', zIndex: 1 }}>
         <nav
           style={{
             display: 'flex',
@@ -366,7 +445,7 @@ export default function LandingPage() {
             borderBottom: '1px solid rgba(108,99,255,0.1)',
             position: 'sticky',
             top: 0,
-            background: 'rgba(10,12,18,0.82)',
+            background: 'rgba(10,12,18,0.85)',
             backdropFilter: 'blur(16px)',
             zIndex: 10,
           }}
@@ -421,7 +500,7 @@ export default function LandingPage() {
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
-            padding: '100px 32px 60px',
+            padding: '100px 32px 80px',
             textAlign: 'center',
           }}
         >
@@ -430,8 +509,8 @@ export default function LandingPage() {
               display: 'inline-flex',
               alignItems: 'center',
               gap: 8,
-              background: 'rgba(108,99,255,0.1)',
-              border: '1px solid rgba(108,99,255,0.28)',
+              background: 'rgba(108,99,255,0.08)',
+              border: '1px solid rgba(108,99,255,0.22)',
               borderRadius: 20,
               padding: '6px 16px',
               marginBottom: 32,
@@ -448,7 +527,7 @@ export default function LandingPage() {
             <span
               style={{
                 fontSize: 11,
-                color: '#A5A0FF',
+                color: '#8880CC',
                 fontFamily: 'var(--arc-mono)',
                 letterSpacing: '0.05em',
               }}
@@ -459,12 +538,12 @@ export default function LandingPage() {
 
           <h1
             style={{
-              fontSize: 'clamp(42px, 6vw, 72px)',
+              fontSize: 'clamp(44px, 6.5vw, 76px)',
               fontWeight: 500,
               lineHeight: 1.06,
               letterSpacing: -2.5,
               marginBottom: 24,
-              maxWidth: 720,
+              maxWidth: 760,
             }}
           >
             Design the conversation.
@@ -478,7 +557,7 @@ export default function LandingPage() {
               color: 'var(--arc-muted)',
               lineHeight: 1.7,
               maxWidth: 460,
-              marginBottom: 40,
+              marginBottom: 44,
             }}
           >
             Ori interviews you about your product and builds your complete
@@ -486,9 +565,7 @@ export default function LandingPage() {
             entity schema, tone principles.
           </p>
 
-          <div
-            style={{ display: 'flex', gap: 12, marginBottom: 20 }}
-          >
+          <div style={{ display: 'flex', gap: 12, marginBottom: 22 }}>
             <button
               onClick={() => router.push('/design')}
               style={{
@@ -501,7 +578,6 @@ export default function LandingPage() {
                 fontFamily: 'var(--arc-font)',
                 fontWeight: 500,
                 cursor: 'pointer',
-                letterSpacing: -0.2,
               }}
             >
               Start with Ori
@@ -509,9 +585,9 @@ export default function LandingPage() {
             <button
               onClick={() => router.push('/design')}
               style={{
-                background: 'rgba(10,12,18,0.6)',
+                background: 'rgba(10,12,18,0.5)',
                 color: '#A5A0FF',
-                border: '1px solid rgba(108,99,255,0.3)',
+                border: '1px solid rgba(108,99,255,0.28)',
                 borderRadius: 10,
                 padding: '14px 32px',
                 fontSize: 15,
@@ -523,9 +599,7 @@ export default function LandingPage() {
             </button>
           </div>
 
-          <div
-            style={{ display: 'flex', gap: 24, alignItems: 'center' }}
-          >
+          <div style={{ display: 'flex', gap: 24, alignItems: 'center' }}>
             {['No forms', 'No scripts', 'Every path is different'].map(
               (label, i) => (
                 <span
@@ -535,7 +609,7 @@ export default function LandingPage() {
                     alignItems: 'center',
                     gap: 6,
                     fontSize: 12,
-                    color: '#555',
+                    color: '#444',
                     fontFamily: 'var(--arc-font)',
                   }}
                 >
@@ -545,7 +619,7 @@ export default function LandingPage() {
                       height: 4,
                       borderRadius: '50%',
                       background: '#6C63FF',
-                      opacity: 0.6,
+                      opacity: 0.5,
                     }}
                   />
                   {label}
@@ -553,39 +627,95 @@ export default function LandingPage() {
               )
             )}
           </div>
+        </section>
 
-          <p
+        <div
+          ref={oriSectionRef}
+          style={{ height: '350vh', position: 'relative' }}
+        >
+          <div
             style={{
-              marginTop: 56,
-              fontSize: 10,
-              color: 'rgba(108,99,255,0.35)',
-              fontFamily: 'var(--arc-mono)',
-              letterSpacing: '0.1em',
+              position: 'sticky',
+              top: 0,
+              height: '100vh',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
             }}
           >
-            scroll — she builds as you go
-          </p>
-        </section>
+            <p
+              style={{
+                fontSize: 10,
+                color:
+                  buildLabel === 'Ori' ? '#A5A0FF' : 'rgba(108,99,255,0.38)',
+                fontFamily: 'var(--arc-mono)',
+                letterSpacing: '0.12em',
+                textTransform: 'uppercase',
+                transition: 'color 0.4s ease',
+                userSelect: 'none',
+              }}
+            >
+              {buildLabel}
+            </p>
+            <div
+              style={{
+                marginTop: 16,
+                height: 2,
+                width: 180,
+                background: 'rgba(108,99,255,0.1)',
+                borderRadius: 2,
+                overflow: 'hidden',
+              }}
+            >
+              <div
+                style={{
+                  height: '100%',
+                  width: `${buildProgress * 100}%`,
+                  background:
+                    buildProgress > 0.85
+                      ? 'linear-gradient(90deg,#6C63FF,#2DD4BF)'
+                      : '#6C63FF',
+                  borderRadius: 2,
+                  transition: 'width 0.15s linear',
+                }}
+              />
+            </div>
+          </div>
+        </div>
 
         <section
           style={{
-            padding: '20px 32px 120px',
+            padding: '80px 32px 100px',
             maxWidth: 800,
             margin: '0 auto',
             display: 'flex',
             flexDirection: 'column',
-            gap: 16,
+            gap: 14,
           }}
         >
+          <p
+            style={{
+              fontSize: 10,
+              color: '#444',
+              textTransform: 'uppercase',
+              letterSpacing: '0.1em',
+              fontFamily: 'var(--arc-mono)',
+              marginBottom: 10,
+              textAlign: 'center',
+            }}
+          >
+            What Ori builds
+          </p>
           {features.map((f, i) => (
             <div
               key={i}
               style={{
-                background: 'rgba(10,12,18,0.75)',
-                border: '1px solid rgba(108,99,255,0.1)',
-                borderLeft: '2px solid #6C63FF',
+                background: f.bg,
+                border: `1px solid ${f.borderColor}`,
+                borderLeft: `2px solid ${f.border}`,
                 borderRadius: '2px 12px 12px 2px',
-                padding: '28px 32px',
+                padding: '24px 28px',
                 backdropFilter: 'blur(10px)',
               }}
             >
@@ -594,16 +724,17 @@ export default function LandingPage() {
                   width: 5,
                   height: 5,
                   borderRadius: '50%',
-                  background: '#6C63FF',
-                  marginBottom: 12,
+                  background: f.border,
+                  marginBottom: 10,
                 }}
               />
               <p
                 style={{
-                  fontSize: 17,
+                  fontSize: 16,
                   fontWeight: 500,
-                  marginBottom: 10,
-                  letterSpacing: -0.4,
+                  marginBottom: 8,
+                  letterSpacing: -0.3,
+                  color: f.labelColor,
                 }}
               >
                 {f.label}
@@ -623,22 +754,21 @@ export default function LandingPage() {
 
         <section
           style={{
-            minHeight: '60vh',
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
-            padding: '60px 32px',
+            padding: '40px 32px 100px',
             textAlign: 'center',
           }}
         >
           <div
             style={{
-              background: 'rgba(10,12,18,0.8)',
-              border: '1px solid rgba(108,99,255,0.15)',
+              background: 'rgba(10,12,18,0.82)',
+              border: '1px solid rgba(108,99,255,0.14)',
               borderRadius: 20,
               padding: '52px 48px',
-              maxWidth: 500,
+              maxWidth: 480,
               backdropFilter: 'blur(16px)',
             }}
           >
@@ -673,8 +803,8 @@ export default function LandingPage() {
                 marginBottom: 28,
               }}
             >
-              One conversation. A complete architecture. No forms,
-              no scripts, no templates. Every path is different.
+              One conversation. A complete architecture. No forms, no scripts,
+              no templates. Every path is different.
             </p>
             <button
               onClick={() => router.push('/design')}
@@ -689,7 +819,6 @@ export default function LandingPage() {
                 fontWeight: 500,
                 cursor: 'pointer',
                 width: '100%',
-                letterSpacing: -0.2,
               }}
             >
               Start with Ori
