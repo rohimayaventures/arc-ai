@@ -5,7 +5,8 @@
 @tailwind utilities;
 
 :root {
-  --arc-bg: #0E1117;
+  /* Matches marketing landing canvas; app surfaces stay elevated */
+  --arc-bg: #0a0c12;
   --arc-surface: #161B27;
   --arc-surface2: #1C2333;
   --arc-violet: #6C63FF;
@@ -14,7 +15,9 @@
   --arc-border: rgba(108, 99, 255, 0.15);
   --arc-border-soft: rgba(240, 242, 248, 0.07);
   --arc-text: #F0F2F8;
-  --arc-muted: #6B7280;
+  /* Readable on #0A0C12 / near-black (was #6B7280 — too dim for body copy) */
+  --arc-muted: #A1A8BA;
+  --arc-muted-dim: #7E8799;
   --arc-success: #34D399;
   --arc-success-dim: rgba(52, 211, 153, 0.12);
   --arc-font: 'Space Grotesk', system-ui, sans-serif;

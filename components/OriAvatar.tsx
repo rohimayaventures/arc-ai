@@ -9,6 +9,17 @@ interface OriAvatarProps {
   size?: number
 }
 
+/** Same proportional system as the marketing canvas (`app/page.tsx` Ori at full build). */
+function geometry(size: number) {
+  const baseR = size * 0.19
+  return {
+    baseR,
+    ring: (i: number) => baseR * 0.28 + i * baseR * 0.38,
+    wavyR: baseR * 1.18,
+    coreR: (t: number) => baseR * 0.24 + Math.sin(t * 2.5) * baseR * 0.05,
+  }
+}
+
 export default function OriAvatar({ state = 'idle', size = 200 }: OriAvatarProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const stateRef = useRef<OriState>(state)
@@ -32,58 +43,177 @@ export default function OriAvatar({ state = 'idle', size = 200 }: OriAvatarProps
     let t = 0
 
     const NODES = 7
-    const ORBITERS = 50
+    const ORBITERS = 70
+    const g = geometry(size)
+
+    const particles = Array.from({ length: 140 }, () => ({
+      xr: Math.random(),
+      yr: Math.random(),
+      r: 0.35 + Math.random() * 0.9,
+      a: 0.04 + Math.random() * 0.16,
+    }))
 
     const orbiters = Array.from({ length: ORBITERS }, () => ({
       angle: Math.random() * Math.PI * 2,
-      radius: W * 0.1 + Math.random() * W * 0.26,
-      speed: (0.0015 + Math.random() * 0.003) * (Math.random() > 0.5 ? 1 : -1),
+      scatterRx: (Math.random() - 0.5) * 1.8,
+      scatterRy: (Math.random() - 0.5) * 1.8,
+      radiusRatio: 0.07 + Math.random() * 0.22,
+      speed: (0.001 + Math.random() * 0.002) * (Math.random() > 0.5 ? 1 : -1),
       phase: Math.random() * Math.PI * 2,
-      size: 0.8 + Math.random() * 1.4,
+      size: 0.85 + Math.random() * 1.75,
     }))
 
-    function getNodes(time: number, currentState: OriState) {
-      const spinSpeed =
-        currentState === 'thinking' ? 0.4
-        : currentState === 'speaking' ? 0.28
-        : 0.18
-      const baseR = currentState === 'thinking' ? W * 0.185 : W * 0.175
+    function getNodes(time: number, currentState: OriState, nodeSpin: number) {
+      const { baseR } = g
       return Array.from({ length: NODES }, (_, i) => {
-        const a = (i / NODES) * Math.PI * 2 + time * spinSpeed
-        const r = baseR + Math.sin(time * 0.9 + i * 1.7) * W * 0.035
+        const a = (i / NODES) * Math.PI * 2 + time * 0.15 * nodeSpin
+        const r = baseR + Math.sin(time * 0.9 + i * 1.7) * baseR * 0.18
         return { x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r }
       })
     }
 
+    /** Motion + emphasis per Ori mood (matches design page state machine). */
     function getStateParams(s: OriState) {
       switch (s) {
         case 'idle':
-          return { orbitSpeed: 0.5, waveAmp: [7, 3, 2], waveFreq: [4, 6, 9], waveSpeed: [1.4, 0.9, 0.5], coreSize: W * 0.038, coreAlpha: 0.65, ringAlpha: 0.035, threadAlpha: 0.06 }
+          return {
+            ringMul: 1,
+            threadMul: 1,
+            wavyMul: 1,
+            wavyTime: 1,
+            orbMul: 1,
+            coreMul: 1,
+            spinOrb: 1,
+            nodeSpin: 1,
+            travelSpeed: 0.32,
+            nodePulseHz: 1.8,
+            ringBreathe: 0,
+            threadTeal: 0,
+            wavyAlpha: 0.58,
+            wavyWidth: 1.05,
+          }
         case 'listening':
-          return { orbitSpeed: 0.7, waveAmp: [8, 4, 2], waveFreq: [4, 6, 9], waveSpeed: [1.6, 1.0, 0.6], coreSize: W * 0.04, coreAlpha: 0.75, ringAlpha: 0.04, threadAlpha: 0.07 }
+          return {
+            ringMul: 1.2,
+            threadMul: 1.15,
+            wavyMul: 1.12,
+            wavyTime: 1.1,
+            orbMul: 1.35,
+            coreMul: 1.12,
+            spinOrb: 1.45,
+            nodeSpin: 1.28,
+            travelSpeed: 0.26,
+            nodePulseHz: 2.05,
+            ringBreathe: 0.045,
+            threadTeal: 0,
+            wavyAlpha: 0.62,
+            wavyWidth: 1,
+          }
         case 'thinking':
-          return { orbitSpeed: 2.2, waveAmp: [14, 7, 4], waveFreq: [4, 7, 11], waveSpeed: [3.2, 2.1, 1.2], coreSize: W * 0.045, coreAlpha: 0.9, ringAlpha: 0.07, threadAlpha: 0.05 }
+          return {
+            ringMul: 1.35,
+            threadMul: 0.88,
+            wavyMul: 1.55,
+            wavyTime: 1.65,
+            orbMul: 1.45,
+            coreMul: 1.18,
+            spinOrb: 2.25,
+            nodeSpin: 1.42,
+            travelSpeed: 0.36,
+            nodePulseHz: 3.35,
+            ringBreathe: 0.05,
+            threadTeal: 0,
+            wavyAlpha: 0.74,
+            wavyWidth: 1.18,
+          }
         case 'speaking':
-          return { orbitSpeed: 1.4, waveAmp: [11, 6, 3], waveFreq: [3, 5, 8], waveSpeed: [2.2, 1.6, 0.9], coreSize: W * 0.05, coreAlpha: 1.0, ringAlpha: 0.06, threadAlpha: 0.12 }
+          return {
+            ringMul: 1.25,
+            threadMul: 1.55,
+            wavyMul: 1.38,
+            wavyTime: 2.35,
+            orbMul: 1.38,
+            coreMul: 1.14,
+            spinOrb: 1.62,
+            nodeSpin: 1.22,
+            travelSpeed: 0.5,
+            nodePulseHz: 2.75,
+            ringBreathe: 0.035,
+            threadTeal: 0,
+            wavyAlpha: 0.68,
+            wavyWidth: 1.12,
+          }
         case 'building':
-          return { orbitSpeed: 1.0, waveAmp: [6, 3, 2], waveFreq: [5, 8, 12], waveSpeed: [1.8, 1.2, 0.7], coreSize: W * 0.036, coreAlpha: 0.8, ringAlpha: 0.05, threadAlpha: 0.14 }
+          return {
+            ringMul: 1.12,
+            threadMul: 1.52,
+            wavyMul: 1.18,
+            wavyTime: 1.42,
+            orbMul: 1.28,
+            coreMul: 1.08,
+            spinOrb: 1.35,
+            nodeSpin: 1.18,
+            travelSpeed: 0.4,
+            nodePulseHz: 2.35,
+            ringBreathe: 0.03,
+            threadTeal: 0.42,
+            wavyAlpha: 0.6,
+            wavyWidth: 1.06,
+          }
         case 'complete':
-          return { orbitSpeed: 0.6, waveAmp: [9, 5, 2], waveFreq: [4, 6, 9], waveSpeed: [1.5, 1.0, 0.6], coreSize: W * 0.042, coreAlpha: 0.9, ringAlpha: 0.05, threadAlpha: 0.1 }
+          return {
+            ringMul: 1.05,
+            threadMul: 1.1,
+            wavyMul: 1.05,
+            wavyTime: 1,
+            orbMul: 1,
+            coreMul: 1,
+            spinOrb: 0.9,
+            nodeSpin: 1,
+            travelSpeed: 0.32,
+            nodePulseHz: 1.75,
+            ringBreathe: 0,
+            threadTeal: 0,
+            wavyAlpha: 0.56,
+            wavyWidth: 1.02,
+          }
       }
     }
 
     function draw() {
       ctx.clearRect(0, 0, W, H)
-      t += 0.009
+      t += 0.007
       const s = stateRef.current
       const p = getStateParams(s)
-      const nodes = getNodes(t, s)
-      const wR = s === 'thinking' ? W * 0.215 : W * 0.205
+      const nodes = getNodes(t, s, p.nodeSpin)
+      const { baseR, wavyR } = g
+      const wt = t * p.wavyTime
 
-      for (let r = 0; r < 6; r++) {
-        const radius = W * 0.046 + r * W * 0.065
-        const alpha = p.ringAlpha + 0.02 * Math.sin(t * 1.2 - r * 0.5)
-        ctx.strokeStyle = `rgba(108,99,255,${alpha})`
+      const bgCenter =
+        s === 'listening' ? 'rgba(108,99,255,0.17)'
+        : s === 'speaking' ? 'rgba(108,99,255,0.15)'
+        : s === 'building' ? 'rgba(108,99,255,0.13)'
+        : 'rgba(108,99,255,0.14)'
+      const bgGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, size * 0.55)
+      bgGrad.addColorStop(0, bgCenter)
+      bgGrad.addColorStop(0.45, 'rgba(108,99,255,0.05)')
+      bgGrad.addColorStop(1, 'rgba(108,99,255,0)')
+      ctx.fillStyle = bgGrad
+      ctx.fillRect(0, 0, W, H)
+
+      particles.forEach((pt) => {
+        ctx.fillStyle = `rgba(108,99,255,${pt.a * p.ringMul})`
+        ctx.beginPath()
+        ctx.arc(pt.xr * W, pt.yr * H, pt.r, 0, Math.PI * 2)
+        ctx.fill()
+      })
+
+      for (let i = 0; i < 7; i++) {
+        const radius = g.ring(i)
+        const alpha =
+          (0.055 + 0.022 * Math.sin(t * 1.2 - i * 0.5) + p.ringBreathe * Math.sin(t * 2.1 + i * 0.4)) *
+          p.ringMul
+        ctx.strokeStyle = `rgba(108,99,255,${Math.min(0.18, alpha)})`
         ctx.lineWidth = 0.5
         ctx.beginPath()
         ctx.arc(cx, cy, radius, 0, Math.PI * 2)
@@ -92,121 +222,144 @@ export default function OriAvatar({ state = 'idle', size = 200 }: OriAvatarProps
 
       for (let i = 0; i < NODES; i++) {
         for (let j = i + 2; j < NODES; j++) {
-          const alpha = p.threadAlpha + 0.04 * Math.sin(t * 0.6 + i + j)
-          ctx.strokeStyle = `rgba(108,99,255,${alpha})`
-          ctx.lineWidth = 0.6
+          const alpha = (0.1 + 0.045 * Math.sin(t * 0.6 + i + j)) * p.threadMul
+          const a = Math.min(0.28, alpha)
+          const te = p.threadTeal
+          ctx.strokeStyle =
+            te > 0
+              ? `rgba(${Math.round(108 + (45 - 108) * te)},${Math.round(99 + (212 - 99) * te)},${Math.round(255 + (191 - 255) * te)},${a})`
+              : `rgba(108,99,255,${a})`
+          ctx.lineWidth = s === 'speaking' ? 0.78 : s === 'building' ? 0.72 : 0.65
           ctx.beginPath()
           ctx.moveTo(nodes[i].x, nodes[i].y)
-          const mx = (nodes[i].x + nodes[j].x) / 2 + Math.sin(t * 0.8 + i * j * 0.3) * W * 0.08
-          const my = (nodes[i].y + nodes[j].y) / 2 + Math.cos(t * 0.8 + i * j * 0.3) * W * 0.08
-          ctx.quadraticCurveTo(mx, my, nodes[j].x, nodes[j].y)
+          const tmx =
+            (nodes[i].x + nodes[j].x) / 2 + Math.sin(t * 0.8 + i * j * 0.3) * baseR * 0.55
+          const tmy =
+            (nodes[i].y + nodes[j].y) / 2 + Math.cos(t * 0.8 + i * j * 0.3) * baseR * 0.55
+          ctx.quadraticCurveTo(tmx, tmy, nodes[j].x, nodes[j].y)
           ctx.stroke()
         }
       }
 
       ctx.beginPath()
-      for (let i = 0; i <= 160; i++) {
-        const angle = (i / 160) * Math.PI * 2
+      for (let i = 0; i <= 200; i++) {
+        const angle = (i / 200) * Math.PI * 2
         const w =
-          Math.sin(angle * p.waveFreq[0] + t * p.waveSpeed[0]) * p.waveAmp[0] +
-          Math.sin(angle * p.waveFreq[1] - t * p.waveSpeed[1]) * p.waveAmp[1] +
-          Math.sin(angle * p.waveFreq[2] + t * p.waveSpeed[2]) * p.waveAmp[2]
-        const r = wR + w
-        const px = cx + Math.cos(angle) * r
-        const py = cy + Math.sin(angle) * r
+          Math.sin(angle * 4 + wt * 1.8) * baseR * 0.09 * p.wavyMul +
+          Math.sin(angle * 6 - wt * 1.2) * baseR * 0.045 * p.wavyMul +
+          Math.sin(angle * 9 + wt * 0.6) * baseR * 0.022 * p.wavyMul
+        const rv = wavyR + w
+        const px = cx + Math.cos(angle) * rv
+        const py = cy + Math.sin(angle) * rv
         i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py)
       }
       ctx.strokeStyle =
-        s === 'thinking' ? 'rgba(108,99,255,0.85)' : 'rgba(108,99,255,0.55)'
-      ctx.lineWidth = s === 'thinking' ? 1.4 : 1.0
+        s === 'thinking'
+          ? `rgba(108,99,255,${Math.min(0.82, p.wavyAlpha + 0.08)})`
+          : `rgba(108,99,255,${p.wavyAlpha})`
+      ctx.lineWidth = p.wavyWidth
       ctx.stroke()
 
       for (let i = 0; i < NODES; i++) {
-        const prog = (t * 0.35 + i / NODES) % 1
+        const prog = (t * p.travelSpeed + i / NODES) % 1
         const from = nodes[i]
         const to = nodes[(i + 3) % NODES]
-        const mx = (from.x + to.x) / 2 + Math.sin(t + i) * W * 0.075
-        const my = (from.y + to.y) / 2 + Math.cos(t + i) * W * 0.075
+        const tmx = (from.x + to.x) / 2 + Math.sin(t + i) * baseR * 0.52
+        const tmy = (from.y + to.y) / 2 + Math.cos(t + i) * baseR * 0.52
         const x =
-          (1 - prog) * (1 - prog) * from.x +
-          2 * (1 - prog) * prog * mx +
-          prog * prog * to.x
+          (1 - prog) * (1 - prog) * from.x + 2 * (1 - prog) * prog * tmx + prog * prog * to.x
         const y =
-          (1 - prog) * (1 - prog) * from.y +
-          2 * (1 - prog) * prog * my +
-          prog * prog * to.y
-        const alpha = Math.sin(prog * Math.PI) * 0.95
-        ctx.fillStyle = `rgba(165,160,255,${alpha})`
+          (1 - prog) * (1 - prog) * from.y + 2 * (1 - prog) * prog * tmy + prog * prog * to.y
+        const alpha = Math.sin(prog * Math.PI) * 0.95 * p.threadMul
+        const tr = s === 'building' ? `rgba(180,220,210,${Math.min(0.95, alpha)})` : `rgba(165,160,255,${Math.min(0.95, alpha)})`
+        ctx.fillStyle = s === 'speaking' ? `rgba(200,195,255,${Math.min(1, alpha * 1.08)})` : tr
         ctx.beginPath()
-        ctx.arc(x, y, 2, 0, Math.PI * 2)
+        ctx.arc(x, y, 2.1, 0, Math.PI * 2)
         ctx.fill()
       }
 
       orbiters.forEach((ob) => {
-        ob.angle += ob.speed * p.orbitSpeed
-        const breathe = Math.sin(t * 1.6 + ob.phase) * W * 0.032
-        const x = cx + Math.cos(ob.angle) * (ob.radius + breathe)
-        const y = cy + Math.sin(ob.angle) * (ob.radius + breathe)
-        const alpha = 0.12 + 0.22 * Math.abs(Math.sin(t * 1.2 + ob.phase))
-        ctx.fillStyle = `rgba(108,99,255,${alpha})`
+        ob.angle += ob.speed * p.spinOrb
+        const targetX =
+          cx +
+          Math.cos(ob.angle) *
+            (ob.radiusRatio * size + Math.sin(t * 1.6 + ob.phase) * baseR * 0.22)
+        const targetY =
+          cy +
+          Math.sin(ob.angle) *
+            (ob.radiusRatio * size + Math.sin(t * 1.6 + ob.phase) * baseR * 0.22)
+        const alpha =
+          (0.12 + 0.28 * Math.abs(Math.sin(t * 1.2 + ob.phase))) * p.orbMul
+        ctx.fillStyle = `rgba(108,99,255,${Math.min(0.45, alpha)})`
         ctx.beginPath()
-        ctx.arc(x, y, ob.size * 0.6, 0, Math.PI * 2)
+        ctx.arc(targetX, targetY, ob.size * 0.65, 0, Math.PI * 2)
         ctx.fill()
       })
 
       for (let i = 0; i < NODES; i++) {
-        const pulse =
-          0.5 + 0.5 * Math.sin(t * (s === 'thinking' ? 3.5 : 1.8) + i * 1.1)
-        ctx.strokeStyle = `rgba(108,99,255,${pulse * 0.5})`
+        const pulse = 0.5 + 0.5 * Math.sin(t * p.nodePulseHz + i * 1.1)
+        ctx.strokeStyle = `rgba(108,99,255,${pulse * 0.52 * p.threadMul})`
         ctx.lineWidth = 0.8
         ctx.beginPath()
-        ctx.arc(nodes[i].x, nodes[i].y, 3 + pulse * 1.5, 0, Math.PI * 2)
+        ctx.arc(nodes[i].x, nodes[i].y, 3 + pulse * 2, 0, Math.PI * 2)
         ctx.stroke()
-        ctx.fillStyle = `rgba(165,160,255,${0.6 + pulse * 0.4})`
+        ctx.fillStyle = `rgba(165,160,255,${(0.65 + pulse * 0.35) * p.coreMul})`
         ctx.beginPath()
-        ctx.arc(nodes[i].x, nodes[i].y, 1.8, 0, Math.PI * 2)
+        ctx.arc(nodes[i].x, nodes[i].y, 2, 0, Math.PI * 2)
         ctx.fill()
       }
 
       if (s === 'building') {
-        ctx.strokeStyle = 'rgba(52,211,153,0.2)'
-        ctx.lineWidth = 0.5
-        ctx.setLineDash([3, 6])
+        const dashPhase = (t * 40) % 12
+        ctx.strokeStyle = 'rgba(52,211,153,0.38)'
+        ctx.lineWidth = 0.85
+        ctx.setLineDash([4, 7])
+        ctx.lineDashOffset = -dashPhase
         ctx.beginPath()
-        ctx.moveTo(cx + W * 0.2, cy)
-        ctx.lineTo(cx + W * 0.42, cy)
+        ctx.moveTo(cx + size * 0.12, cy)
+        ctx.lineTo(cx + size * 0.4, cy)
         ctx.stroke()
         ctx.setLineDash([])
+        ctx.lineDashOffset = 0
+        ctx.strokeStyle = 'rgba(45,212,191,0.12)'
+        ctx.lineWidth = 0.6
+        ctx.beginPath()
+        ctx.arc(cx, cy, wavyR + baseR * 0.06, -0.35, 0.35)
+        ctx.stroke()
       }
 
       if (s === 'complete') {
-        const successAlpha = 0.3 + 0.2 * Math.sin(t * 2.5)
+        const successAlpha = 0.28 + 0.2 * Math.sin(t * 2.5)
         ctx.strokeStyle = `rgba(52,211,153,${successAlpha})`
-        ctx.lineWidth = 1.5
+        ctx.lineWidth = 1.4
         ctx.beginPath()
-        ctx.arc(cx, cy, W * 0.22, 0, Math.PI * 2)
+        ctx.arc(cx, cy, baseR * 1.15, 0, Math.PI * 2)
         ctx.stroke()
       }
 
-      const coreR = p.coreSize + Math.sin(t * 2.5) * W * 0.01
-      const ca = p.coreAlpha
+      const coreR = g.coreR(t) * p.coreMul
+      const ca =
+        s === 'thinking' ? 0.95
+        : s === 'speaking' ? 1
+        : s === 'complete' ? 0.92
+        : 0.88
       const coreColor = s === 'complete' ? '52,211,153' : '108,99,255'
 
-      for (let r = 3; r >= 1; r--) {
-        ctx.fillStyle = `rgba(${coreColor},${(0.07 - r * 0.018) * ca})`
+      for (let r = 4; r >= 1; r--) {
+        ctx.fillStyle = `rgba(${coreColor},${(0.08 - r * 0.015) * ca})`
         ctx.beginPath()
-        ctx.arc(cx, cy, coreR + r * W * 0.018, 0, Math.PI * 2)
+        ctx.arc(cx, cy, coreR + r * baseR * 0.12, 0, Math.PI * 2)
         ctx.fill()
       }
 
       ctx.save()
       ctx.translate(cx, cy)
-      ctx.rotate(t * (s === 'thinking' ? 1.8 : 0.6))
+      ctx.rotate(t * (s === 'thinking' ? 1.05 : 0.55))
       ctx.strokeStyle =
         s === 'complete'
-          ? `rgba(52,211,153,${ca * 0.9})`
-          : `rgba(165,160,255,${ca * 0.9})`
-      ctx.lineWidth = 1.2
+          ? `rgba(52,211,153,${ca * 0.92})`
+          : `rgba(165,160,255,${ca * 0.92})`
+      ctx.lineWidth = 1.35
       const ds = coreR * 0.75
       ctx.beginPath()
       ctx.moveTo(0, -ds)
@@ -219,15 +372,14 @@ export default function OriAvatar({ state = 'idle', size = 200 }: OriAvatarProps
 
       ctx.fillStyle =
         s === 'complete'
-          ? `rgba(52,211,153,${ca * 0.95})`
-          : `rgba(165,160,255,${ca * 0.95})`
+          ? `rgba(52,211,153,${ca * 0.96})`
+          : `rgba(165,160,255,${ca * 0.96})`
       ctx.beginPath()
-      ctx.arc(cx, cy, W * 0.018, 0, Math.PI * 2)
+      ctx.arc(cx, cy, baseR * 0.1, 0, Math.PI * 2)
       ctx.fill()
-
       ctx.fillStyle = `rgba(255,255,255,${ca})`
       ctx.beginPath()
-      ctx.arc(cx, cy, W * 0.008, 0, Math.PI * 2)
+      ctx.arc(cx, cy, baseR * 0.045, 0, Math.PI * 2)
       ctx.fill()
 
       rafRef.current = requestAnimationFrame(draw)

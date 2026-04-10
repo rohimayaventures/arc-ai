@@ -1,9 +1,19 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import OriAvatar, { OriState } from '@/components/OriAvatar'
 import ArchitecturePanel from '@/components/ArchitecturePanel'
+import ArcMark from '@/components/ArcMark'
+import {
+  normalizeOriMessage,
+  ORI_EMPTY_MESSAGE_FALLBACK,
+} from '@/lib/oriMessage'
 import { ArchitectureDelta, ChatMessage, OriTurn } from '@/lib/types'
+
+const ARC_PRIMARY_BTN_SHADOW =
+  '0 6px 24px rgba(108, 99, 255, 0.38), 0 2px 10px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.12)'
+const ARC_DIVIDER = '1px solid rgba(108, 99, 255, 0.1)'
 
 interface DisplayMessage {
   role: 'user' | 'assistant'
@@ -13,6 +23,7 @@ interface DisplayMessage {
 const PILL_LABELS = ['Tell us about you', 'Design your system', 'Architecture ready']
 
 export default function DesignPage() {
+  const router = useRouter()
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [displayMessages, setDisplayMessages] = useState<DisplayMessage[]>([])
   const [architecture, setArchitecture] = useState<ArchitectureDelta>({})
@@ -41,10 +52,22 @@ export default function DesignPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages: [] }),
       })
-      const turn: OriTurn = await res.json()
+      const data: unknown = await res.json()
+      if (!res.ok) {
+        const err =
+          typeof (data as { error?: string }).error === 'string'
+            ? (data as { error: string }).error
+            : 'Could not start the conversation.'
+        setDisplayMessages([{ role: 'assistant', content: err }])
+        setOriState('listening')
+        return
+      }
+      const turn = data as OriTurn
+      const assistantText =
+        normalizeOriMessage(turn.message) || ORI_EMPTY_MESSAGE_FALLBACK
       setOriState('speaking')
-      setDisplayMessages([{ role: 'assistant', content: turn.message }])
-      setMessages([{ role: 'assistant', content: turn.message }])
+      setDisplayMessages([{ role: 'assistant', content: assistantText }])
+      setMessages([{ role: 'assistant', content: assistantText }])
       setArchitecture(turn.architectureDelta || {})
       setProgressPercent(turn.progressPercent || 0)
       setTurnNumber(turn.turnNumber || 1)
@@ -72,14 +95,36 @@ export default function DesignPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages: newMessages }),
       })
-      const turn: OriTurn = await res.json()
+      const data: unknown = await res.json()
+      if (!res.ok) {
+        const err =
+          typeof (data as { error?: string }).error === 'string'
+            ? (data as { error: string }).error
+            : 'Something went wrong. Please try again.'
+        setDisplayMessages((prev) => [
+          ...prev,
+          { role: 'assistant', content: err },
+        ])
+        setOriState('listening')
+        return
+      }
+
+      const turn = data as OriTurn
+      const assistantText =
+        normalizeOriMessage(turn.message) || ORI_EMPTY_MESSAGE_FALLBACK
 
       setOriState('speaking')
 
-      const assistantMsg: ChatMessage = { role: 'assistant', content: turn.message }
+      const assistantMsg: ChatMessage = {
+        role: 'assistant',
+        content: assistantText,
+      }
       const updatedMessages = [...newMessages, assistantMsg]
       setMessages(updatedMessages)
-      setDisplayMessages((prev) => [...prev, { role: 'assistant', content: turn.message }])
+      setDisplayMessages((prev) => [
+        ...prev,
+        { role: 'assistant', content: assistantText },
+      ])
 
       if (turn.architectureDelta) {
         setArchitecture((prev) => ({
@@ -172,35 +217,40 @@ export default function DesignPage() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '0 20px',
-          height: 52,
-          borderBottom: '1px solid var(--arc-border-soft)',
-          background: 'var(--arc-surface)',
+          padding: '0 24px',
+          height: 58,
+          borderBottom: ARC_DIVIDER,
+          background: 'rgba(10,12,18,0.92)',
+          backdropFilter: 'blur(16px)',
           flexShrink: 0,
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div
-            style={{
-              width: 16,
-              height: 16,
-              background: 'var(--arc-violet)',
-              transform: 'rotate(45deg)',
-              borderRadius: 3,
-              flexShrink: 0,
-            }}
-          />
+        <button
+          type="button"
+          onClick={() => router.push('/')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            background: 'transparent',
+            border: 'none',
+            cursor: 'pointer',
+            padding: 0,
+          }}
+        >
+          <ArcMark size={26} />
           <span
             style={{
-              fontSize: 15,
+              fontSize: 16,
               fontWeight: 500,
-              color: 'var(--arc-text)',
-              letterSpacing: -0.3,
+              color: '#F0F2F8',
+              letterSpacing: -0.4,
+              fontFamily: 'var(--arc-font)',
             }}
           >
             Arc
           </span>
-        </div>
+        </button>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           {PILL_LABELS.map((label, i) => {
@@ -243,8 +293,9 @@ export default function DesignPage() {
         <span
           style={{
             fontSize: 10,
-            color: 'var(--arc-muted)',
+            color: 'var(--arc-muted-dim)',
             fontFamily: 'var(--arc-mono)',
+            letterSpacing: '0.06em',
           }}
         >
           {turnNumber > 0 ? `turn ${turnNumber}` : 'ready'}
@@ -263,14 +314,14 @@ export default function DesignPage() {
           style={{
             display: 'flex',
             flexDirection: 'column',
-            borderRight: '1px solid var(--arc-border-soft)',
+            borderRight: ARC_DIVIDER,
             overflow: 'hidden',
           }}
         >
           <div
             style={{
               padding: '10px 14px',
-              borderBottom: '1px solid var(--arc-border-soft)',
+              borderBottom: ARC_DIVIDER,
               fontSize: 11,
               color: 'var(--arc-muted)',
               textTransform: 'uppercase',
@@ -304,21 +355,23 @@ export default function DesignPage() {
                   textAlign: 'center',
                 }}
               >
-                <p style={{ color: 'var(--arc-muted)', fontSize: 13, lineHeight: 1.6 }}>
+                <p style={{ color: 'var(--arc-muted)', fontSize: 14, lineHeight: 1.65 }}>
                   Ori will interview you about your product and build your conversation architecture in real time.
                 </p>
                 <button
+                  type="button"
                   onClick={startSession}
                   style={{
                     background: 'var(--arc-violet)',
                     color: '#fff',
                     border: 'none',
-                    borderRadius: 8,
-                    padding: '10px 24px',
-                    fontSize: 13,
+                    borderRadius: 10,
+                    padding: '12px 28px',
+                    fontSize: 15,
                     fontFamily: 'var(--arc-font)',
                     fontWeight: 500,
                     cursor: 'pointer',
+                    boxShadow: ARC_PRIMARY_BTN_SHADOW,
                   }}
                 >
                   Meet Ori
@@ -463,7 +516,7 @@ export default function DesignPage() {
           <div
             style={{
               padding: '12px 14px',
-              borderTop: '1px solid var(--arc-border-soft)',
+              borderTop: ARC_DIVIDER,
               display: 'flex',
               gap: 8,
               flexShrink: 0,
@@ -496,20 +549,22 @@ export default function DesignPage() {
               }}
             />
             <button
+              type="button"
               onClick={sendMessage}
               disabled={isLoading || sessionComplete || !sessionStarted}
               style={{
-                width: 34,
-                height: 34,
+                width: 36,
+                height: 36,
                 background: 'var(--arc-violet)',
                 border: 'none',
-                borderRadius: 6,
+                borderRadius: 8,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 cursor: isLoading || sessionComplete ? 'default' : 'pointer',
                 opacity: isLoading || sessionComplete ? 0.5 : 1,
                 flexShrink: 0,
+                boxShadow: isLoading || sessionComplete ? 'none' : ARC_PRIMARY_BTN_SHADOW,
               }}
             >
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
@@ -524,8 +579,8 @@ export default function DesignPage() {
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
-            background: '#0A0D13',
-            borderRight: '1px solid var(--arc-border-soft)',
+            background: 'var(--arc-bg)',
+            borderRight: ARC_DIVIDER,
           }}
         >
           <span
@@ -549,7 +604,7 @@ export default function DesignPage() {
               padding: 16,
             }}
           >
-            <OriAvatar state={oriState} size={160} />
+            <OriAvatar state={oriState} size={220} />
           </div>
           <div
             style={{
