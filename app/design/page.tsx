@@ -1,31 +1,43 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import OriAvatar, { OriState } from '@/components/OriAvatar'
 import ArchitecturePanel from '@/components/ArchitecturePanel'
-import ArcMark from '@/components/ArcMark'
-import {
-  normalizeOriMessage,
-  ORI_EMPTY_MESSAGE_FALLBACK,
-} from '@/lib/oriMessage'
 import { ArchitectureDelta, ChatMessage, OriTurn } from '@/lib/types'
 
-const ARC_PRIMARY_BTN_SHADOW =
-  '0 6px 24px rgba(108, 99, 255, 0.38), 0 2px 10px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.12)'
-const ARC_DIVIDER = '1px solid rgba(108, 99, 255, 0.1)'
-
-interface DisplayMessage {
-  role: 'user' | 'assistant'
-  content: string
+function ArcMark({ size = 24 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 28 28" fill="none">
+      <path d="M4 24 L14 4 L24 24" stroke="#6C63FF" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M8 17 Q14 11 20 17" stroke="#A5A0FF" strokeWidth="1.4" strokeLinecap="round" fill="none" />
+      <circle cx="14" cy="14" r="1.5" fill="#6C63FF" opacity="0.7" />
+    </svg>
+  )
 }
 
 const PILL_LABELS = ['Tell us about you', 'Design your system', 'Architecture ready']
 
+const STATE_GLOW: Record<OriState, string> = {
+  idle:      'rgba(108,99,255,0.06)',
+  listening: 'rgba(108,99,255,0.13)',
+  thinking:  'rgba(184,146,74,0.12)',
+  speaking:  'rgba(108,99,255,0.18)',
+  building:  'rgba(45,212,191,0.10)',
+  complete:  'rgba(52,211,153,0.14)',
+}
+
+const STATE_RING: Record<OriState, string> = {
+  idle:      'rgba(108,99,255,0.08)',
+  listening: 'rgba(108,99,255,0.22)',
+  thinking:  'rgba(184,146,74,0.28)',
+  speaking:  'rgba(108,99,255,0.32)',
+  building:  'rgba(45,212,191,0.22)',
+  complete:  'rgba(52,211,153,0.35)',
+}
+
 export default function DesignPage() {
-  const router = useRouter()
   const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [displayMessages, setDisplayMessages] = useState<DisplayMessage[]>([])
+  const [displayMessages, setDisplayMessages] = useState<{ role: 'user' | 'assistant'; content: string }[]>([])
   const [architecture, setArchitecture] = useState<ArchitectureDelta>({})
   const [progressPercent, setProgressPercent] = useState(0)
   const [oriState, setOriState] = useState<OriState>('idle')
@@ -43,7 +55,7 @@ export default function DesignPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [displayMessages, isLoading])
 
-  async function startSession() {
+  const startSession = useCallback(async () => {
     setSessionStarted(true)
     setOriState('thinking')
     try {
@@ -52,109 +64,73 @@ export default function DesignPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages: [] }),
       })
-      const data: unknown = await res.json()
-      if (!res.ok) {
-        const err =
-          typeof (data as { error?: string }).error === 'string'
-            ? (data as { error: string }).error
-            : 'Could not start the conversation.'
-        setDisplayMessages([{ role: 'assistant', content: err }])
-        setOriState('listening')
-        return
+      if (!res.ok) throw new Error(`API ${res.status}`)
+      const turn: OriTurn = await res.json()
+      if (turn.message) {
+        setOriState('speaking')
+        setDisplayMessages([{ role: 'assistant', content: turn.message }])
+        setMessages([{ role: 'assistant', content: turn.message }])
+        setArchitecture(turn.architectureDelta || {})
+        setProgressPercent(turn.progressPercent || 0)
+        setTurnNumber(turn.turnNumber || 1)
+        setTimeout(() => setOriState('listening'), 1400)
+      } else {
+        throw new Error('No message in response')
       }
-      const turn = data as OriTurn
-      const assistantText =
-        normalizeOriMessage(turn.message) || ORI_EMPTY_MESSAGE_FALLBACK
-      setOriState('speaking')
-      setDisplayMessages([{ role: 'assistant', content: assistantText }])
-      setMessages([{ role: 'assistant', content: assistantText }])
-      setArchitecture(turn.architectureDelta || {})
-      setProgressPercent(turn.progressPercent || 0)
-      setTurnNumber(turn.turnNumber || 1)
-      setTimeout(() => setOriState('listening'), 1200)
-    } catch {
+    } catch (err) {
+      console.error('startSession failed:', err)
+      setDisplayMessages([{
+        role: 'assistant',
+        content: 'Ori failed to start. Check your ANTHROPIC_API_KEY in .env.local and restart the dev server.',
+      }])
       setOriState('idle')
     }
-  }
+  }, [])
 
-  async function sendMessage() {
+  const sendMessage = useCallback(async () => {
     if (!inputValue.trim() || isLoading || sessionComplete) return
     const userText = inputValue.trim()
     setInputValue('')
     setIsLoading(true)
     setOriState('thinking')
-
     const userMsg: ChatMessage = { role: 'user', content: userText }
     const newMessages = [...messages, userMsg]
     setMessages(newMessages)
     setDisplayMessages((prev) => [...prev, { role: 'user', content: userText }])
-
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages: newMessages }),
       })
-      const data: unknown = await res.json()
-      if (!res.ok) {
-        const err =
-          typeof (data as { error?: string }).error === 'string'
-            ? (data as { error: string }).error
-            : 'Something went wrong. Please try again.'
-        setDisplayMessages((prev) => [
-          ...prev,
-          { role: 'assistant', content: err },
-        ])
-        setOriState('listening')
-        return
-      }
-
-      const turn = data as OriTurn
-      const assistantText =
-        normalizeOriMessage(turn.message) || ORI_EMPTY_MESSAGE_FALLBACK
-
+      if (!res.ok) throw new Error(`API ${res.status}`)
+      const turn: OriTurn = await res.json()
       setOriState('speaking')
-
-      const assistantMsg: ChatMessage = {
-        role: 'assistant',
-        content: assistantText,
-      }
+      const assistantMsg: ChatMessage = { role: 'assistant', content: turn.message }
       const updatedMessages = [...newMessages, assistantMsg]
       setMessages(updatedMessages)
-      setDisplayMessages((prev) => [
-        ...prev,
-        { role: 'assistant', content: assistantText },
-      ])
-
+      setDisplayMessages((prev) => [...prev, { role: 'assistant', content: turn.message }])
       if (turn.architectureDelta) {
         setArchitecture((prev) => ({
-          intentTaxonomy:
-            turn.architectureDelta.intentTaxonomy ?? prev.intentTaxonomy,
-          escalationFlow:
-            turn.architectureDelta.escalationFlow ?? prev.escalationFlow,
-          entitySchema:
-            turn.architectureDelta.entitySchema ?? prev.entitySchema,
-          toneGuide:
-            turn.architectureDelta.toneGuide ?? prev.toneGuide,
+          intentTaxonomy: turn.architectureDelta.intentTaxonomy ?? prev.intentTaxonomy,
+          escalationFlow: turn.architectureDelta.escalationFlow ?? prev.escalationFlow,
+          entitySchema:   turn.architectureDelta.entitySchema ?? prev.entitySchema,
+          toneGuide:      turn.architectureDelta.toneGuide ?? prev.toneGuide,
         }))
+        setTimeout(() => setOriState('building'), 800)
+        setTimeout(() => setOriState('listening'), 1600)
+      } else {
+        setTimeout(() => setOriState('listening'), 1200)
       }
-
       setProgressPercent(turn.progressPercent || 0)
       setTurnNumber(turn.turnNumber || 0)
-
       if (turn.progressPercent > 30) setPillIndex(1)
       if (turn.architectureComplete) {
         setPillIndex(2)
         setSessionComplete(true)
         setOriState('complete')
         await saveSession(updatedMessages, turn.architectureDelta, userText)
-        return
       }
-
-      setTimeout(() => {
-        setOriState('building')
-        setTimeout(() => setOriState('listening'), 800)
-      }, 1000)
     } catch {
       setDisplayMessages((prev) => [
         ...prev,
@@ -165,35 +141,22 @@ export default function DesignPage() {
       setIsLoading(false)
       setTimeout(() => inputRef.current?.focus(), 100)
     }
-  }
+  }, [inputValue, isLoading, sessionComplete, messages])
 
-  async function saveSession(
+  const saveSession = async (
     finalMessages: ChatMessage[],
     finalArchitecture: ArchitectureDelta,
     productDescription: string
-  ) {
+  ) => {
     try {
       const res = await fetch('/api/session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: finalMessages,
-          architecture: finalArchitecture,
-          productDescription,
-        }),
+        body: JSON.stringify({ messages: finalMessages, architecture: finalArchitecture, productDescription }),
       })
       const data = await res.json()
       if (data.shareUrl) setShareUrl(data.shareUrl)
-    } catch {
-      console.error('Session save failed')
-    }
-  }
-
-  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      sendMessage()
-    }
+    } catch { console.error('Session save failed') }
   }
 
   const pillState = (i: number) => {
@@ -202,177 +165,60 @@ export default function DesignPage() {
     return 'pending'
   }
 
+  const sectionsComplete = [
+    !!(architecture.intentTaxonomy?.length),
+    !!(architecture.escalationFlow?.length),
+    !!(architecture.entitySchema?.length),
+    !!(architecture.toneGuide?.length),
+  ].filter(Boolean).length
+
+  const progressColors = ['#6C63FF', '#B8924A', '#2DD4BF', '#F472B6']
+  const currentProgressColor = progressColors[Math.max(0, sectionsComplete - 1)] || '#6C63FF'
+
   return (
-    <div
-      style={{
-        height: '100vh',
-        display: 'flex',
-        flexDirection: 'column',
-        background: 'var(--arc-bg)',
-        overflow: 'hidden',
-      }}
-    >
-      <nav
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '0 24px',
-          height: 58,
-          borderBottom: ARC_DIVIDER,
-          background: 'rgba(10,12,18,0.92)',
-          backdropFilter: 'blur(16px)',
-          flexShrink: 0,
-        }}
-      >
-        <button
-          type="button"
-          onClick={() => router.push('/')}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 10,
-            background: 'transparent',
-            border: 'none',
-            cursor: 'pointer',
-            padding: 0,
-          }}
-        >
-          <ArcMark size={26} />
-          <span
-            style={{
-              fontSize: 16,
-              fontWeight: 500,
-              color: '#F0F2F8',
-              letterSpacing: -0.4,
-              fontFamily: 'var(--arc-font)',
-            }}
-          >
-            Arc
-          </span>
+    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: '#0A0C12', overflow: 'hidden', fontFamily: 'var(--arc-font)', color: 'var(--arc-text)', position: 'relative' }}>
+
+      <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse 60% 55% at 50% 50%, rgba(108,99,255,0.09) 0%, transparent 70%)', pointerEvents: 'none', zIndex: 0 }} />
+      <div style={{ position: 'absolute', inset: 0, backgroundImage: "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")", backgroundSize: '256px 256px', opacity: 0.022, pointerEvents: 'none', zIndex: 0 }} />
+
+      <nav style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 20px', height: 52, borderBottom: '1px solid rgba(108,99,255,0.1)', background: 'rgba(10,12,18,0.9)', backdropFilter: 'blur(16px)', flexShrink: 0, position: 'relative', zIndex: 10 }}>
+        <button onClick={() => window.location.href = '/'} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}>
+          <ArcMark size={22} />
+          <span style={{ fontSize: 15, fontWeight: 500, color: '#F0F2F8', letterSpacing: -0.3 }}>Arc</span>
         </button>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
           {PILL_LABELS.map((label, i) => {
             const ps = pillState(i)
             return (
-              <span
-                key={i}
-                style={{
-                  fontSize: 11,
-                  fontWeight: 500,
-                  padding: '4px 12px',
-                  borderRadius: 20,
-                  fontFamily: 'var(--arc-mono)',
-                  background:
-                    ps === 'done'
-                      ? 'rgba(108,99,255,0.12)'
-                      : ps === 'active'
-                      ? 'var(--arc-violet)'
-                      : 'transparent',
-                  color:
-                    ps === 'done'
-                      ? '#A5A0FF'
-                      : ps === 'active'
-                      ? '#fff'
-                      : 'var(--arc-muted)',
-                  border:
-                    ps === 'done'
-                      ? '1px solid rgba(108,99,255,0.3)'
-                      : ps === 'active'
-                      ? '1px solid var(--arc-violet)'
-                      : '1px solid rgba(240,242,248,0.07)',
-                }}
-              >
+              <span key={i} style={{ fontSize: 11, fontWeight: 500, padding: '4px 12px', borderRadius: 20, fontFamily: 'var(--arc-mono)', background: ps === 'done' ? 'rgba(108,99,255,0.12)' : ps === 'active' ? '#6C63FF' : 'transparent', color: ps === 'done' ? '#A5A0FF' : ps === 'active' ? '#fff' : '#555', border: ps === 'done' ? '1px solid rgba(108,99,255,0.3)' : ps === 'active' ? '1px solid #6C63FF' : '1px solid rgba(240,242,248,0.07)' }}>
                 {label}
               </span>
             )
           })}
         </div>
 
-        <span
-          style={{
-            fontSize: 10,
-            color: 'var(--arc-muted-dim)',
-            fontFamily: 'var(--arc-mono)',
-            letterSpacing: '0.06em',
-          }}
-        >
+        <span style={{ fontSize: 10, color: '#555', fontFamily: 'var(--arc-mono)' }}>
           {turnNumber > 0 ? `turn ${turnNumber}` : 'ready'}
         </span>
       </nav>
 
-      <div
-        style={{
-          flex: 1,
-          display: 'grid',
-          gridTemplateColumns: '1fr 220px 1fr',
-          overflow: 'hidden',
-        }}
-      >
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            borderRight: ARC_DIVIDER,
-            overflow: 'hidden',
-          }}
-        >
-          <div
-            style={{
-              padding: '10px 14px',
-              borderBottom: ARC_DIVIDER,
-              fontSize: 11,
-              color: 'var(--arc-muted)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.07em',
-              fontFamily: 'var(--arc-mono)',
-              flexShrink: 0,
-            }}
-          >
+      <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 200px 1fr', overflow: 'hidden', position: 'relative', zIndex: 1 }}>
+
+        <div style={{ display: 'flex', flexDirection: 'column', borderRight: '1px solid rgba(108,99,255,0.08)', overflow: 'hidden' }}>
+          <div style={{ padding: '10px 14px', borderBottom: '1px solid rgba(108,99,255,0.08)', fontSize: 11, color: '#555', textTransform: 'uppercase' as const, letterSpacing: '0.07em', fontFamily: 'var(--arc-mono)', flexShrink: 0 }}>
             Conversation
           </div>
 
-          <div
-            style={{
-              flex: 1,
-              overflowY: 'auto',
-              padding: 16,
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 12,
-            }}
-          >
+          <div style={{ flex: 1, overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
             {!sessionStarted && (
-              <div
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  height: '100%',
-                  gap: 16,
-                  textAlign: 'center',
-                }}
-              >
-                <p style={{ color: 'var(--arc-muted)', fontSize: 14, lineHeight: 1.65 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 16, textAlign: 'center', padding: '0 24px' }}>
+                <p style={{ color: '#6B7280', fontSize: 13, lineHeight: 1.65, maxWidth: 280 }}>
                   Ori will interview you about your product and build your conversation architecture in real time.
                 </p>
                 <button
-                  type="button"
                   onClick={startSession}
-                  style={{
-                    background: 'var(--arc-violet)',
-                    color: '#fff',
-                    border: 'none',
-                    borderRadius: 10,
-                    padding: '12px 28px',
-                    fontSize: 15,
-                    fontFamily: 'var(--arc-font)',
-                    fontWeight: 500,
-                    cursor: 'pointer',
-                    boxShadow: ARC_PRIMARY_BTN_SHADOW,
-                  }}
+                  style={{ background: '#6C63FF', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 24px', fontSize: 13, fontFamily: 'var(--arc-font)', fontWeight: 500, cursor: 'pointer', boxShadow: '0 4px 20px rgba(108,99,255,0.35)' }}
                 >
                   Meet Ori
                 </button>
@@ -380,57 +226,11 @@ export default function DesignPage() {
             )}
 
             {displayMessages.map((msg, i) => (
-              <div
-                key={i}
-                style={{
-                  display: 'flex',
-                  gap: 8,
-                  flexDirection: msg.role === 'user' ? 'row-reverse' : 'row',
-                  alignItems: 'flex-start',
-                }}
-              >
-                <div
-                  style={{
-                    width: 24,
-                    height: 24,
-                    borderRadius: 5,
-                    background:
-                      msg.role === 'assistant'
-                        ? 'var(--arc-violet)'
-                        : 'var(--arc-surface2)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: 10,
-                    fontWeight: 600,
-                    color: msg.role === 'assistant' ? '#fff' : 'var(--arc-muted)',
-                    flexShrink: 0,
-                    border: msg.role === 'user' ? '1px solid var(--arc-border-soft)' : 'none',
-                  }}
-                >
+              <div key={i} style={{ display: 'flex', gap: 8, flexDirection: msg.role === 'user' ? 'row-reverse' : 'row', alignItems: 'flex-start' }}>
+                <div style={{ width: 24, height: 24, borderRadius: 5, background: msg.role === 'assistant' ? '#6C63FF' : 'rgba(28,35,51,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 600, color: msg.role === 'assistant' ? '#fff' : '#6B7280', flexShrink: 0, border: msg.role === 'user' ? '1px solid rgba(108,99,255,0.15)' : 'none' }}>
                   {msg.role === 'assistant' ? 'O' : 'Y'}
                 </div>
-                <div
-                  style={{
-                    fontSize: 13,
-                    lineHeight: 1.55,
-                    padding: '9px 12px',
-                    borderRadius:
-                      msg.role === 'assistant' ? '2px 8px 8px 8px' : '8px 2px 8px 8px',
-                    maxWidth: '82%',
-                    color: 'var(--arc-text)',
-                    background:
-                      msg.role === 'assistant'
-                        ? 'var(--arc-surface2)'
-                        : 'var(--arc-violet-dim)',
-                    borderLeft:
-                      msg.role === 'assistant' ? '2px solid var(--arc-violet)' : 'none',
-                    border:
-                      msg.role === 'user'
-                        ? '1px solid rgba(108,99,255,0.2)'
-                        : undefined,
-                  }}
-                >
+                <div style={{ fontSize: 13, lineHeight: 1.6, padding: '9px 13px', borderRadius: msg.role === 'assistant' ? '2px 10px 10px 10px' : '10px 2px 10px 10px', maxWidth: '82%', color: msg.role === 'assistant' ? 'rgba(228,232,242,0.95)' : 'rgba(228,232,242,0.9)', background: msg.role === 'assistant' ? 'rgba(28,35,51,0.85)' : 'rgba(108,99,255,0.1)', borderLeft: msg.role === 'assistant' ? '2px solid #6C63FF' : 'none', border: msg.role === 'user' ? '1px solid rgba(108,99,255,0.2)' : undefined, backdropFilter: 'blur(8px)' }}>
                   {msg.content}
                 </div>
               </div>
@@ -438,200 +238,75 @@ export default function DesignPage() {
 
             {isLoading && (
               <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                <div
-                  style={{
-                    width: 24,
-                    height: 24,
-                    borderRadius: 5,
-                    background: 'var(--arc-violet)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: 10,
-                    fontWeight: 600,
-                    color: '#fff',
-                    flexShrink: 0,
-                  }}
-                >
-                  O
-                </div>
-                <div
-                  style={{
-                    padding: '10px 14px',
-                    background: 'var(--arc-surface2)',
-                    borderLeft: '2px solid var(--arc-violet)',
-                    borderRadius: '2px 8px 8px 8px',
-                    display: 'flex',
-                    gap: 4,
-                    alignItems: 'center',
-                  }}
-                >
+                <div style={{ width: 24, height: 24, borderRadius: 5, background: '#6C63FF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 600, color: '#fff', flexShrink: 0 }}>O</div>
+                <div style={{ padding: '10px 14px', background: 'rgba(28,35,51,0.85)', borderLeft: '2px solid #6C63FF', borderRadius: '2px 10px 10px 10px', display: 'flex', gap: 4, alignItems: 'center', backdropFilter: 'blur(8px)' }}>
                   {[0, 1, 2].map((d) => (
-                    <div
-                      key={d}
-                      style={{
-                        width: 5,
-                        height: 5,
-                        borderRadius: '50%',
-                        background: '#A5A0FF',
-                        animation: 'blink 1.2s infinite',
-                        animationDelay: `${d * 0.2}s`,
-                      }}
-                    />
+                    <div key={d} style={{ width: 5, height: 5, borderRadius: '50%', background: '#A5A0FF', animation: 'blink 1.2s infinite', animationDelay: `${d * 0.2}s` }} />
                   ))}
                 </div>
               </div>
             )}
 
             {sessionComplete && shareUrl && (
-              <div
-                style={{
-                  background: 'var(--arc-success-dim)',
-                  border: '1px solid rgba(52,211,153,0.25)',
-                  borderRadius: 8,
-                  padding: '12px 14px',
-                  marginTop: 8,
-                }}
-              >
-                <p style={{ fontSize: 12, color: 'var(--arc-success)', margin: '0 0 8px', fontWeight: 500 }}>
-                  Architecture complete
-                </p>
-                <a
-                  href={shareUrl}
-                  style={{
-                    fontSize: 11,
-                    color: '#A5A0FF',
-                    fontFamily: 'var(--arc-mono)',
-                    textDecoration: 'none',
-                  }}
-                >
+              <div style={{ background: 'rgba(52,211,153,0.08)', border: '1px solid rgba(52,211,153,0.22)', borderRadius: 10, padding: '12px 14px', marginTop: 8 }}>
+                <p style={{ fontSize: 12, color: '#34D399', margin: '0 0 8px', fontWeight: 500 }}>Architecture complete</p>
+                <a href={shareUrl} style={{ fontSize: 11, color: '#A5A0FF', fontFamily: 'var(--arc-mono)', textDecoration: 'none' }}>
                   View shareable architecture →
                 </a>
               </div>
             )}
-
             <div ref={messagesEndRef} />
           </div>
 
-          <div
-            style={{
-              padding: '12px 14px',
-              borderTop: ARC_DIVIDER,
-              display: 'flex',
-              gap: 8,
-              flexShrink: 0,
-            }}
-          >
+          <div style={{ padding: '12px 14px', borderTop: '1px solid rgba(108,99,255,0.08)', display: 'flex', gap: 8, flexShrink: 0, background: 'rgba(10,12,18,0.6)', backdropFilter: 'blur(8px)' }}>
             <input
               ref={inputRef}
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
-              onKeyDown={handleKeyDown}
+              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() } }}
               disabled={isLoading || sessionComplete || !sessionStarted}
-              placeholder={
-                !sessionStarted
-                  ? 'Click Meet Ori to begin...'
-                  : sessionComplete
-                  ? 'Architecture complete'
-                  : 'Reply to Ori...'
-              }
-              style={{
-                flex: 1,
-                background: 'var(--arc-surface2)',
-                border: '1px solid var(--arc-border-soft)',
-                borderRadius: 6,
-                padding: '8px 12px',
-                fontSize: 13,
-                color: 'var(--arc-text)',
-                fontFamily: 'var(--arc-font)',
-                outline: 'none',
-                opacity: sessionComplete ? 0.5 : 1,
-              }}
+              placeholder={!sessionStarted ? 'Click Meet Ori to begin...' : sessionComplete ? 'Architecture complete' : 'Reply to Ori...'}
+              style={{ flex: 1, background: 'rgba(28,35,51,0.7)', border: '1px solid rgba(108,99,255,0.15)', borderRadius: 7, padding: '8px 12px', fontSize: 13, color: 'rgba(228,232,242,0.95)', fontFamily: 'var(--arc-font)', outline: 'none', opacity: sessionComplete ? 0.5 : 1, backdropFilter: 'blur(8px)' }}
             />
             <button
-              type="button"
               onClick={sendMessage}
               disabled={isLoading || sessionComplete || !sessionStarted}
-              style={{
-                width: 36,
-                height: 36,
-                background: 'var(--arc-violet)',
-                border: 'none',
-                borderRadius: 8,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: isLoading || sessionComplete ? 'default' : 'pointer',
-                opacity: isLoading || sessionComplete ? 0.5 : 1,
-                flexShrink: 0,
-                boxShadow: isLoading || sessionComplete ? 'none' : ARC_PRIMARY_BTN_SHADOW,
-              }}
+              style={{ width: 34, height: 34, background: isLoading || sessionComplete ? 'rgba(108,99,255,0.3)' : '#6C63FF', border: 'none', borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: isLoading || sessionComplete ? 'default' : 'pointer', flexShrink: 0, transition: 'background 0.2s ease' }}
             >
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                <path d="M1 6L11 1L6 11L5.5 6.5L1 6Z" fill="white" />
-              </svg>
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1 6L11 1L6 11L5.5 6.5L1 6Z" fill="white" /></svg>
             </button>
           </div>
         </div>
 
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            background: 'var(--arc-bg)',
-            borderRight: ARC_DIVIDER,
-          }}
-        >
-          <span
-            style={{
-              fontSize: 9,
-              color: 'var(--arc-muted)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.1em',
-              fontFamily: 'var(--arc-mono)',
-              padding: '12px 0 0',
-            }}
-          >
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', background: '#07090F', borderRight: '1px solid rgba(108,99,255,0.08)', position: 'relative', overflow: 'hidden' }}>
+          <div style={{ position: 'absolute', inset: 0, background: STATE_GLOW[oriState], transition: 'background 0.8s ease', pointerEvents: 'none' }} />
+          <div style={{ position: 'absolute', inset: 0, borderRadius: 0, boxShadow: `inset 0 0 60px ${STATE_RING[oriState]}`, transition: 'box-shadow 0.8s ease', pointerEvents: 'none' }} />
+
+          <span style={{ fontSize: 9, color: '#444', textTransform: 'uppercase' as const, letterSpacing: '0.1em', fontFamily: 'var(--arc-mono)', padding: '12px 0 0', position: 'relative', zIndex: 1, transition: 'color 0.4s ease' }}>
             {oriState}
           </span>
-          <div
-            style={{
-              flex: 1,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: 16,
-            }}
-          >
-            <OriAvatar state={oriState} size={220} />
+
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 12, position: 'relative', zIndex: 1 }}>
+            <OriAvatar state={oriState} size={148} />
           </div>
-          <div
-            style={{
-              padding: '10px 0 14px',
-              fontSize: 10,
-              color: 'var(--arc-muted)',
-              fontFamily: 'var(--arc-mono)',
-              textAlign: 'center',
-            }}
-          >
-            Ori
+
+          <div style={{ padding: '0 12px 14px', textAlign: 'center', position: 'relative', zIndex: 1 }}>
+            <p style={{ fontSize: 11, color: '#A5A0FF', fontFamily: 'var(--arc-mono)', margin: '0 0 8px' }}>Ori</p>
+            {sessionStarted && (
+              <div style={{ height: 2, width: 120, background: 'rgba(108,99,255,0.12)', borderRadius: 2, overflow: 'hidden', margin: '0 auto' }}>
+                <div style={{ height: '100%', width: `${progressPercent}%`, background: `linear-gradient(90deg, #6C63FF, ${currentProgressColor})`, borderRadius: 2, transition: 'width 0.8s ease, background 0.5s ease' }} />
+              </div>
+            )}
           </div>
         </div>
 
         <div style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-          <ArchitecturePanel
-            architecture={architecture}
-            progressPercent={progressPercent}
-          />
+          <ArchitecturePanel architecture={architecture} progressPercent={progressPercent} />
         </div>
       </div>
 
       <style>{`
-        @keyframes blink {
-          0%, 80%, 100% { opacity: 0.2; }
-          40% { opacity: 1; }
-        }
+        @keyframes blink { 0%,80%,100%{opacity:0.2} 40%{opacity:1} }
       `}</style>
     </div>
   )
