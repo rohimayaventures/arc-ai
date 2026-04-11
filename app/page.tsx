@@ -440,7 +440,8 @@ export default function LandingPage() {
           const rv = wR + w
           const px = ocx + Math.cos(angle) * rv
           const py = ocy + Math.sin(angle) * rv
-          i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py)
+          if (i === 0) ctx.moveTo(px, py)
+          else ctx.lineTo(px, py)
         }
         ctx.strokeStyle = `rgba(108,99,255,${0.62 * wa})`
         ctx.lineWidth = 1.1

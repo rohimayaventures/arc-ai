@@ -251,7 +251,8 @@ export default function OriAvatar({ state = 'idle', size = 200 }: OriAvatarProps
         const rv = wavyR + w
         const px = cx + Math.cos(angle) * rv
         const py = cy + Math.sin(angle) * rv
-        i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py)
+        if (i === 0) ctx.moveTo(px, py)
+        else ctx.lineTo(px, py)
       }
       ctx.strokeStyle =
         s === 'thinking'
