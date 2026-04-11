@@ -51,6 +51,123 @@ export default function DesignPage() {
   const [architectureOverlayOpen, setArchitectureOverlayOpen] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const bgCanvasRef = useRef<HTMLCanvasElement>(null)
+  const bgMouseRef = useRef({ x: -1, y: -1 })
+  const bgSmoothMouseRef = useRef({ x: -1, y: -1 })
+  const bgRafRef = useRef<number>(0)
+
+  useEffect(() => {
+    function onMouse(e: MouseEvent) {
+      bgMouseRef.current = { x: e.clientX, y: e.clientY }
+    }
+    window.addEventListener('mousemove', onMouse)
+    return () => window.removeEventListener('mousemove', onMouse)
+  }, [])
+
+  useEffect(() => {
+    const canvas = bgCanvasRef.current
+    if (!canvas) return
+    const d2Maybe = canvas.getContext('2d')
+    if (!d2Maybe) return
+    const d2: CanvasRenderingContext2D = d2Maybe
+    const c = canvas
+
+    function resize() {
+      c.width = window.innerWidth
+      c.height = window.innerHeight
+    }
+    resize()
+    window.addEventListener('resize', resize)
+
+    let t = 0
+    const particles = Array.from({ length: 280 }, () => ({
+      xr: Math.random(),
+      yr: Math.random(),
+      r: 0.4 + Math.random() * 0.8,
+      a: 0.04 + Math.random() * 0.16,
+    }))
+
+    function draw() {
+      const W = c.width
+      const H = c.height
+      d2.clearRect(0, 0, W, H)
+      t += 0.007
+
+      const ocx = W / 2
+      const ocy = H / 2
+
+      bgSmoothMouseRef.current.x += (bgMouseRef.current.x - bgSmoothMouseRef.current.x) * 0.07
+      bgSmoothMouseRef.current.y += (bgMouseRef.current.y - bgSmoothMouseRef.current.y) * 0.07
+
+      const bgGrad = d2.createRadialGradient(ocx, ocy, 0, ocx, ocy, W * 0.6)
+      bgGrad.addColorStop(0, 'rgba(108,99,255,0.11)')
+      bgGrad.addColorStop(0.5, 'rgba(108,99,255,0.04)')
+      bgGrad.addColorStop(1, 'rgba(108,99,255,0)')
+      d2.fillStyle = bgGrad
+      d2.fillRect(0, 0, W, H)
+
+      particles.forEach((p) => {
+        d2.fillStyle = `rgba(108,99,255,${p.a})`
+        d2.beginPath()
+        d2.arc(p.xr * W, p.yr * H, p.r, 0, Math.PI * 2)
+        d2.fill()
+      })
+
+      const mx = bgSmoothMouseRef.current.x
+      const my = bgSmoothMouseRef.current.y
+      if (mx > 0 && my > 0) {
+        const dx = ocx - mx
+        const dy = ocy - my
+        const dist = Math.sqrt(dx * dx + dy * dy)
+        if (dist > 20) {
+          const cg = d2.createRadialGradient(mx, my, 0, mx, my, 75)
+          cg.addColorStop(0, 'rgba(165,160,255,0.2)')
+          cg.addColorStop(0.4, 'rgba(108,99,255,0.07)')
+          cg.addColorStop(1, 'rgba(108,99,255,0)')
+          d2.fillStyle = cg
+          d2.beginPath()
+          d2.arc(mx, my, 75, 0, Math.PI * 2)
+          d2.fill()
+
+          const steps = 80
+          const ang = Math.atan2(dy, dx)
+          for (let i = 0; i < steps; i++) {
+            const prog = i / steps
+            const bx = mx + dx * prog
+            const by = my + dy * prog
+            const width = 40 * (1 - prog * 0.65)
+            const alpha =
+              0.052 * Math.sin(prog * Math.PI) * (0.5 + 0.5 * Math.sin(t * 2.5 + prog * 10))
+            d2.fillStyle = `rgba(108,99,255,${alpha})`
+            d2.beginPath()
+            d2.ellipse(bx, by, width * 0.5, width * 0.13, ang, 0, Math.PI * 2)
+            d2.fill()
+          }
+
+          const beamGrad = d2.createLinearGradient(mx, my, ocx, ocy)
+          beamGrad.addColorStop(0, 'rgba(165,160,255,0.0)')
+          beamGrad.addColorStop(0.15, 'rgba(108,99,255,0.42)')
+          beamGrad.addColorStop(0.52, 'rgba(184,146,74,0.32)')
+          beamGrad.addColorStop(0.85, 'rgba(45,212,191,0.4)')
+          beamGrad.addColorStop(1, 'rgba(45,212,191,0.04)')
+          d2.strokeStyle = beamGrad
+          d2.lineWidth = 1.4
+          d2.beginPath()
+          d2.moveTo(mx, my)
+          d2.lineTo(ocx, ocy)
+          d2.stroke()
+        }
+      }
+
+      bgRafRef.current = requestAnimationFrame(draw)
+    }
+
+    draw()
+    return () => {
+      window.removeEventListener('resize', resize)
+      if (bgRafRef.current) cancelAnimationFrame(bgRafRef.current)
+    }
+  }, [])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -267,6 +384,18 @@ export default function DesignPage() {
 
   return (
     <div className="design-page" style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: '#0A0C12', overflow: 'hidden', fontFamily: 'var(--arc-font)', color: 'var(--arc-text)', position: 'relative' }}>
+      <canvas
+        ref={bgCanvasRef}
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          pointerEvents: 'none',
+          zIndex: 0,
+        }}
+      />
 
       <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse 60% 55% at 50% 50%, rgba(108,99,255,0.09) 0%, transparent 70%)', pointerEvents: 'none', zIndex: 0 }} />
       <div style={{ position: 'absolute', inset: 0, backgroundImage: "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")", backgroundSize: '256px 256px', opacity: 0.022, pointerEvents: 'none', zIndex: 0 }} />
