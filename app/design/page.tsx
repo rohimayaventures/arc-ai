@@ -18,21 +18,30 @@ function ArcMark({ size = 24 }: { size?: number }) {
 const PILL_LABELS = ['Tell us about you', 'Design your system', 'Architecture ready']
 
 const STATE_GLOW: Record<OriState, string> = {
-  idle:      'rgba(108,99,255,0.06)',
-  listening: 'rgba(108,99,255,0.13)',
-  thinking:  'rgba(184,146,74,0.12)',
-  speaking:  'rgba(108,99,255,0.18)',
-  building:  'rgba(45,212,191,0.10)',
-  complete:  'rgba(52,211,153,0.14)',
+  idle:      'rgba(108,99,255,0.03)',
+  listening: 'rgba(108,99,255,0.16)',
+  thinking:  'rgba(184,146,74,0.26)',
+  speaking:  'rgba(165,160,255,0.20)',
+  building:  'rgba(45,212,191,0.18)',
+  complete:  'rgba(52,211,153,0.28)',
 }
 
 const STATE_RING: Record<OriState, string> = {
-  idle:      'rgba(108,99,255,0.08)',
-  listening: 'rgba(108,99,255,0.22)',
-  thinking:  'rgba(184,146,74,0.28)',
-  speaking:  'rgba(108,99,255,0.32)',
-  building:  'rgba(45,212,191,0.22)',
-  complete:  'rgba(52,211,153,0.35)',
+  idle:      'rgba(108,99,255,0.04)',
+  listening: 'rgba(108,99,255,0.24)',
+  thinking:  'rgba(184,146,74,0.38)',
+  speaking:  'rgba(165,160,255,0.30)',
+  building:  'rgba(45,212,191,0.26)',
+  complete:  'rgba(52,211,153,0.42)',
+}
+
+const STATE_LABEL_COLOR: Record<OriState, string> = {
+  idle:      '#333',
+  listening: '#8880CC',
+  thinking:  '#D4AE78',
+  speaking:  '#A5A0FF',
+  building:  '#5EEAD4',
+  complete:  '#34D399',
 }
 
 export default function DesignPage() {
@@ -301,7 +310,7 @@ export default function DesignPage() {
             </div>
           </div>
           <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 6 }}>
-            <span style={{ fontSize: 9, color: oriState === 'idle' ? '#444' : '#888', textTransform: 'uppercase' as const, letterSpacing: '0.1em', fontFamily: 'var(--arc-mono)' }}>
+            <span style={{ fontSize: 9, color: STATE_LABEL_COLOR[oriState], textTransform: 'uppercase' as const, letterSpacing: '0.1em', fontFamily: 'var(--arc-mono)' }}>
               {sessionStarted ? oriState : 'ready'}
             </span>
             {sessionStarted && (
@@ -446,7 +455,7 @@ export default function DesignPage() {
           <div style={{ position: 'absolute', inset: 0, background: STATE_GLOW[oriState], transition: 'background 0.8s ease', pointerEvents: 'none' }} />
           <div style={{ position: 'absolute', inset: 0, boxShadow: `inset 0 0 60px ${STATE_RING[oriState]}`, transition: 'box-shadow 0.8s ease', pointerEvents: 'none' }} />
 
-          <span style={{ fontSize: 9, color: oriState === 'idle' ? '#333' : '#666', textTransform: 'uppercase' as const, letterSpacing: '0.1em', fontFamily: 'var(--arc-mono)', padding: '12px 0 0', position: 'relative', zIndex: 1, transition: 'color 0.4s ease' }}>
+          <span style={{ fontSize: 9, color: STATE_LABEL_COLOR[oriState], textTransform: 'uppercase' as const, letterSpacing: '0.1em', fontFamily: 'var(--arc-mono)', padding: '12px 0 0', position: 'relative', zIndex: 1, transition: 'color 0.4s ease' }}>
             {sessionStarted ? oriState : ''}
           </span>
 
