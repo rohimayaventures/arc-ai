@@ -48,12 +48,42 @@ export default function DesignPage() {
   const [shareUrl, setShareUrl] = useState<string | null>(null)
   const [pillIndex, setPillIndex] = useState(0)
   const [sessionStarted, setSessionStarted] = useState(false)
+  const [architectureOverlayOpen, setArchitectureOverlayOpen] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [displayMessages, isLoading])
+
+  const resizeComposer = useCallback(() => {
+    const el = inputRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    const max = 168
+    el.style.height = `${Math.min(Math.max(el.scrollHeight, 40), max)}px`
+  }, [])
+
+  useEffect(() => {
+    resizeComposer()
+  }, [inputValue, resizeComposer])
+
+  useEffect(() => {
+    if (!architectureOverlayOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setArchitectureOverlayOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [architectureOverlayOpen])
+
+  useEffect(() => {
+    const onResize = () => {
+      if (window.innerWidth > 768) setArchitectureOverlayOpen(false)
+    }
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
 
   const startSession = useCallback(async () => {
     setSessionStarted(true)
@@ -236,7 +266,7 @@ export default function DesignPage() {
   }
 
   return (
-    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: '#0A0C12', overflow: 'hidden', fontFamily: 'var(--arc-font)', color: 'var(--arc-text)', position: 'relative' }}>
+    <div className="design-page" style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: '#0A0C12', overflow: 'hidden', fontFamily: 'var(--arc-font)', color: 'var(--arc-text)', position: 'relative' }}>
 
       <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse 60% 55% at 50% 50%, rgba(108,99,255,0.09) 0%, transparent 70%)', pointerEvents: 'none', zIndex: 0 }} />
       <div style={{ position: 'absolute', inset: 0, backgroundImage: "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")", backgroundSize: '256px 256px', opacity: 0.022, pointerEvents: 'none', zIndex: 0 }} />
@@ -246,7 +276,7 @@ export default function DesignPage() {
           <ArcMark size={22} />
           <span style={{ fontSize: 15, fontWeight: 500, color: '#F0F2F8', letterSpacing: -0.3 }}>Arc</span>
         </button>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+        <div className="design-nav-pills" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
           {PILL_LABELS.map((label, i) => {
             const ps = pillState(i)
             return (
@@ -261,9 +291,28 @@ export default function DesignPage() {
         </span>
       </nav>
 
-      <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 200px 1fr', overflow: 'hidden', position: 'relative', zIndex: 1 }}>
+      <div className="design-main">
+        <div className="design-mobile-or-strip">
+          <div style={{ position: 'relative', width: 80, height: 80, flexShrink: 0 }}>
+            <div style={{ position: 'absolute', inset: 0, background: STATE_GLOW[oriState], borderRadius: 12, transition: 'background 0.8s ease', pointerEvents: 'none' }} />
+            <div style={{ position: 'absolute', inset: 0, borderRadius: 12, boxShadow: `inset 0 0 24px ${STATE_RING[oriState]}`, transition: 'box-shadow 0.8s ease', pointerEvents: 'none' }} />
+            <div style={{ position: 'relative', zIndex: 1, width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <OriAvatar state={oriState} size={80} />
+            </div>
+          </div>
+          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 6 }}>
+            <span style={{ fontSize: 9, color: oriState === 'idle' ? '#444' : '#888', textTransform: 'uppercase' as const, letterSpacing: '0.1em', fontFamily: 'var(--arc-mono)' }}>
+              {sessionStarted ? oriState : 'ready'}
+            </span>
+            {sessionStarted && (
+              <div style={{ height: 3, width: '100%', maxWidth: 200, background: 'rgba(108,99,255,0.1)', borderRadius: 2, overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${progressPercent}%`, background: `linear-gradient(90deg, #6C63FF, ${currentProgressColor})`, borderRadius: 2, transition: 'width 0.8s ease, background 0.5s ease' }} />
+              </div>
+            )}
+          </div>
+        </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', borderRight: '1px solid rgba(108,99,255,0.08)', overflow: 'hidden' }}>
+        <div className="design-chat-col" style={{ display: 'flex', flexDirection: 'column', borderRight: '1px solid rgba(108,99,255,0.08)', overflow: 'hidden', minHeight: 0 }}>
           <div style={{ padding: '10px 14px', borderBottom: '1px solid rgba(108,99,255,0.08)', fontSize: 10, color: '#555', textTransform: 'uppercase' as const, letterSpacing: '0.08em', fontFamily: 'var(--arc-mono)', flexShrink: 0 }}>
             Conversation
           </div>
@@ -351,15 +400,35 @@ export default function DesignPage() {
             <div ref={messagesEndRef} />
           </div>
 
-          <div style={{ padding: '10px 12px', borderTop: '1px solid rgba(108,99,255,0.08)', display: 'flex', gap: 8, flexShrink: 0, background: 'rgba(10,12,18,0.6)', backdropFilter: 'blur(8px)' }}>
-            <input
+          <div className="design-mobile-arch-row">
+            <button
+              type="button"
+              onClick={() => setArchitectureOverlayOpen(true)}
+              style={{ width: '100%', fontSize: 11, color: '#A5A0FF', background: 'rgba(108,99,255,0.08)', border: '1px solid rgba(108,99,255,0.2)', borderRadius: 8, padding: '8px 12px', cursor: 'pointer', fontFamily: 'var(--arc-mono)' }}
+            >
+              View architecture
+            </button>
+          </div>
+
+          <div className="design-composer" style={{ padding: '10px 12px', borderTop: '1px solid rgba(108,99,255,0.08)', display: 'flex', gap: 8, flexShrink: 0, background: 'rgba(10,12,18,0.6)', backdropFilter: 'blur(8px)', alignItems: 'flex-end' }}>
+            <textarea
               ref={inputRef}
               value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() } }}
+              onChange={(e) => {
+                setInputValue(e.target.value)
+                requestAnimationFrame(resizeComposer)
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
+                  sendMessage()
+                }
+              }}
+              rows={1}
               disabled={isLoading || sessionComplete || !sessionStarted}
               placeholder={!sessionStarted ? 'Click Meet Ori to begin...' : sessionComplete ? 'Architecture complete' : 'Reply to Ori...'}
-              style={{ flex: 1, background: 'rgba(28,35,51,0.7)', border: '1px solid rgba(108,99,255,0.15)', borderRadius: 7, padding: '8px 12px', fontSize: 13, color: 'rgba(228,232,242,0.95)', fontFamily: 'var(--arc-font)', outline: 'none', transition: 'border-color 0.2s ease, box-shadow 0.2s ease', opacity: sessionComplete ? 0.5 : 1 }}
+              className="design-composer-textarea"
+              style={{ flex: 1, minHeight: 40, maxHeight: 168, background: 'rgba(28,35,51,0.7)', border: '1px solid rgba(108,99,255,0.15)', borderRadius: 7, padding: '8px 12px', fontSize: 13, lineHeight: 1.45, color: 'rgba(228,232,242,0.95)', fontFamily: 'var(--arc-font)', outline: 'none', transition: 'border-color 0.2s ease, box-shadow 0.2s ease', opacity: sessionComplete ? 0.5 : 1, resize: 'none', overflowY: 'auto', alignSelf: 'stretch' }}
               onFocus={(e) => { e.target.style.borderColor = 'rgba(108,99,255,0.5)'; e.target.style.boxShadow = '0 0 0 3px rgba(108,99,255,0.12)' }}
               onBlur={(e) => { e.target.style.borderColor = 'rgba(108,99,255,0.15)'; e.target.style.boxShadow = 'none' }}
             />
@@ -373,7 +442,7 @@ export default function DesignPage() {
           </div>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', background: '#07090F', borderRight: '1px solid rgba(108,99,255,0.08)', position: 'relative', overflow: 'hidden' }}>
+        <div className="design-or-desktop-col" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', background: '#07090F', borderRight: '1px solid rgba(108,99,255,0.08)', position: 'relative', overflow: 'hidden' }}>
           <div style={{ position: 'absolute', inset: 0, background: STATE_GLOW[oriState], transition: 'background 0.8s ease', pointerEvents: 'none' }} />
           <div style={{ position: 'absolute', inset: 0, boxShadow: `inset 0 0 60px ${STATE_RING[oriState]}`, transition: 'box-shadow 0.8s ease', pointerEvents: 'none' }} />
 
@@ -395,13 +464,106 @@ export default function DesignPage() {
           </div>
         </div>
 
-        <div style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        <div className="design-arch-desktop-col" style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           <ArchitecturePanel architecture={architecture} progressPercent={progressPercent} />
         </div>
       </div>
 
+      {architectureOverlayOpen && (
+        <div
+          className="design-arch-overlay-backdrop"
+          role="presentation"
+          onClick={() => setArchitectureOverlayOpen(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 60, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Conversation architecture"
+            className="design-arch-overlay-panel"
+            onClick={(e) => e.stopPropagation()}
+            style={{ width: '100%', maxHeight: '88vh', background: '#0A0C12', borderTopLeftRadius: 14, borderTopRightRadius: 14, border: '1px solid rgba(108,99,255,0.2)', borderBottom: 'none', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 -12px 40px rgba(0,0,0,0.45)' }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', borderBottom: '1px solid rgba(108,99,255,0.1)', flexShrink: 0 }}>
+              <span style={{ fontSize: 12, fontWeight: 500, color: '#E4E8F2', fontFamily: 'var(--arc-font)' }}>Architecture</span>
+              <button
+                type="button"
+                onClick={() => setArchitectureOverlayOpen(false)}
+                style={{ background: 'rgba(108,99,255,0.12)', border: '1px solid rgba(108,99,255,0.25)', color: '#A5A0FF', width: 32, height: 32, borderRadius: 8, cursor: 'pointer', fontSize: 18, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                aria-label="Close architecture panel"
+              >
+                ×
+              </button>
+            </div>
+            <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
+              <ArchitecturePanel architecture={architecture} progressPercent={progressPercent} />
+            </div>
+          </div>
+        </div>
+      )}
+
       <style>{`
         @keyframes blink { 0%,80%,100%{opacity:0.2} 40%{opacity:1} }
+        @keyframes design-arch-slide-up {
+          from { transform: translateY(100%); opacity: 0.85; }
+          to { transform: translateY(0); opacity: 1; }
+        }
+        .design-main {
+          flex: 1;
+          display: grid;
+          grid-template-columns: 1fr 200px 1fr;
+          overflow: hidden;
+          position: relative;
+          z-index: 1;
+          min-height: 0;
+        }
+        .design-mobile-or-strip {
+          display: none;
+        }
+        .design-mobile-arch-row {
+          display: none;
+          flex-shrink: 0;
+          padding: 0 12px 8px;
+        }
+        @media (max-width: 768px) {
+          .design-nav-pills {
+            display: none !important;
+          }
+          .design-main {
+            display: flex;
+            flex-direction: column;
+          }
+          .design-mobile-or-strip {
+            display: flex !important;
+            flex-direction: row;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 14px;
+            border-bottom: 1px solid rgba(108,99,255,0.12);
+            background: #07090F;
+            flex-shrink: 0;
+          }
+          .design-or-desktop-col,
+          .design-arch-desktop-col {
+            display: none !important;
+          }
+          .design-chat-col {
+            flex: 1;
+            min-height: 0;
+            border-right: none !important;
+          }
+          .design-mobile-arch-row {
+            display: block !important;
+          }
+          .design-arch-overlay-panel {
+            animation: design-arch-slide-up 0.28s ease-out forwards;
+          }
+        }
+        @media (min-width: 769px) {
+          .design-arch-overlay-backdrop {
+            display: none !important;
+          }
+        }
       `}</style>
     </div>
   )
