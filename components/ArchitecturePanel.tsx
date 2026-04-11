@@ -3,14 +3,19 @@
 import ArchCard from './ArchCard'
 import { ArchitectureDelta } from '@/lib/types'
 
+export type ArchitecturePulseSection = 'intent' | 'escalation' | 'entity' | 'tone' | null
+
 interface ArchitecturePanelProps {
   architecture: ArchitectureDelta
   progressPercent: number
+  /** Section that just received its first rows — plays a one-shot reveal. */
+  pulseSection?: ArchitecturePulseSection
 }
 
 export default function ArchitecturePanel({
   architecture,
   progressPercent,
+  pulseSection = null,
 }: ArchitecturePanelProps) {
   const sectionsComplete = [
     architecture.intentTaxonomy && architecture.intentTaxonomy.length > 0,
@@ -66,21 +71,25 @@ export default function ArchitecturePanel({
           type="intent"
           populated={!!(architecture.intentTaxonomy && architecture.intentTaxonomy.length > 0)}
           data={architecture.intentTaxonomy}
+          revealPulse={pulseSection === 'intent'}
         />
         <ArchCard
           type="escalation"
           populated={!!(architecture.escalationFlow && architecture.escalationFlow.length > 0)}
           data={architecture.escalationFlow}
+          revealPulse={pulseSection === 'escalation'}
         />
         <ArchCard
           type="entity"
           populated={!!(architecture.entitySchema && architecture.entitySchema.length > 0)}
           data={architecture.entitySchema}
+          revealPulse={pulseSection === 'entity'}
         />
         <ArchCard
           type="tone"
           populated={!!(architecture.toneGuide && architecture.toneGuide.length > 0)}
           data={architecture.toneGuide}
+          revealPulse={pulseSection === 'tone'}
         />
       </div>
 

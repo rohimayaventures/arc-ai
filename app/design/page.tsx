@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import ArcMark from '@/components/ArcMark'
 import OriAvatar, { OriState } from '@/components/OriAvatar'
-import ArchitecturePanel from '@/components/ArchitecturePanel'
+import ArchitecturePanel, { type ArchitecturePulseSection } from '@/components/ArchitecturePanel'
 import { ArchitectureDelta, ChatMessage, OriTurn } from '@/lib/types'
 
 const PILL_LABELS = ['Tell us about you', 'Design your system', 'Architecture ready']
@@ -27,12 +27,30 @@ const STATE_RING: Record<OriState, string> = {
 }
 
 const STATE_LABEL_COLOR: Record<OriState, string> = {
-  idle:      '#333',
-  listening: '#8880CC',
+  idle:      '#94A3C8',
+  listening: '#A5A0FF',
   thinking:  '#D4AE78',
-  speaking:  '#A5A0FF',
+  speaking:  '#C4BFFF',
   building:  '#5EEAD4',
-  complete:  '#34D399',
+  complete:  '#6EE7B7',
+}
+
+/** Human-readable Ori line (strip + desktop); avoids duplicate “ready”. */
+const STATE_DISPLAY_LABEL: Record<OriState, string> = {
+  idle:      'Standing by',
+  listening: 'Listening',
+  thinking:  'Thinking',
+  speaking:  'Speaking',
+  building:  'Writing architecture',
+  complete:  'Architecture live',
+}
+
+function journeyChapter(turn: number, progress: number, complete: boolean): string {
+  if (complete) return 'Finale'
+  if (progress >= 88 || turn >= 10) return 'Ship-ready polish'
+  if (progress >= 55 || turn >= 6) return 'Entities & tone'
+  if (progress >= 28 || turn >= 3) return 'Handoffs & rules'
+  return 'Intents & scope'
 }
 
 export default function DesignPage() {
@@ -55,6 +73,42 @@ export default function DesignPage() {
   const bgMouseRef = useRef({ x: -1, y: -1 })
   const bgSmoothMouseRef = useRef({ x: -1, y: -1 })
   const bgRafRef = useRef<number>(0)
+  const prevArchitectureRef = useRef<ArchitectureDelta>({})
+  const [pulseSection, setPulseSection] = useState<ArchitecturePulseSection>(null)
+  const [showOriIntro, setShowOriIntro] = useState(true)
+
+  useEffect(() => {
+    const id = window.setTimeout(() => setShowOriIntro(false), 1500)
+    return () => window.clearTimeout(id)
+  }, [])
+
+  useEffect(() => {
+    type ArchKey = keyof Pick<
+      ArchitectureDelta,
+      'intentTaxonomy' | 'escalationFlow' | 'entitySchema' | 'toneGuide'
+    >
+    const keyMap: Record<ArchKey, Exclude<ArchitecturePulseSection, null>> = {
+      intentTaxonomy: 'intent',
+      escalationFlow: 'escalation',
+      entitySchema: 'entity',
+      toneGuide: 'tone',
+    }
+    let hit: ArchitecturePulseSection = null
+    const prev = prevArchitectureRef.current
+    for (const key of Object.keys(keyMap) as ArchKey[]) {
+      const n = architecture[key]?.length ?? 0
+      const p = prev[key]?.length ?? 0
+      if (n > 0 && p === 0) {
+        hit = keyMap[key]
+        break
+      }
+    }
+    prevArchitectureRef.current = { ...architecture }
+    if (!hit) return
+    setPulseSection(hit)
+    const tid = window.setTimeout(() => setPulseSection(null), 2200)
+    return () => window.clearTimeout(tid)
+  }, [architecture])
 
   useEffect(() => {
     function onMouse(e: MouseEvent) {
@@ -368,8 +422,39 @@ export default function DesignPage() {
     return lines.join('\n')
   }
 
-  function copyMarkdown() {
-    navigator.clipboard.writeText(exportMarkdown())
+  /** Clipboard API often rejects in embedded previews or when the document lacks focus; never leave a rejected promise. */
+  function fallbackCopyTextToClipboard(text: string) {
+    const ta = document.createElement('textarea')
+    ta.value = text
+    ta.setAttribute('readonly', '')
+    ta.style.position = 'fixed'
+    ta.style.left = '-9999px'
+    ta.style.top = '0'
+    document.body.appendChild(ta)
+    ta.focus()
+    ta.select()
+    try {
+      document.execCommand('copy')
+    } finally {
+      document.body.removeChild(ta)
+    }
+  }
+
+  async function copyMarkdown() {
+    const text = exportMarkdown()
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text)
+      } else {
+        fallbackCopyTextToClipboard(text)
+      }
+    } catch {
+      try {
+        fallbackCopyTextToClipboard(text)
+      } catch {
+        console.warn('Copy to clipboard failed')
+      }
+    }
   }
 
   function downloadMarkdown() {
@@ -409,15 +494,30 @@ export default function DesignPage() {
           {PILL_LABELS.map((label, i) => {
             const ps = pillState(i)
             return (
-              <span key={i} style={{ fontSize: 11, fontWeight: 500, padding: '4px 12px', borderRadius: 20, fontFamily: 'var(--arc-mono)', background: ps === 'done' ? 'rgba(108,99,255,0.12)' : ps === 'active' ? '#6C63FF' : 'transparent', color: ps === 'done' ? '#A5A0FF' : ps === 'active' ? '#fff' : '#555', border: ps === 'done' ? '1px solid rgba(108,99,255,0.3)' : ps === 'active' ? '1px solid #6C63FF' : '1px solid rgba(240,242,248,0.07)' }}>
+              <span key={i} style={{ fontSize: 11, fontWeight: 500, padding: '4px 12px', borderRadius: 20, fontFamily: 'var(--arc-mono)', background: ps === 'done' ? 'rgba(108,99,255,0.12)' : ps === 'active' ? '#6C63FF' : 'transparent', color: ps === 'done' ? '#A5A0FF' : ps === 'active' ? '#fff' : 'rgba(176,184,204,0.72)', border: ps === 'done' ? '1px solid rgba(108,99,255,0.3)' : ps === 'active' ? '1px solid #6C63FF' : '1px solid rgba(240,242,248,0.07)' }}>
                 {label}
               </span>
             )
           })}
         </div>
-        <span style={{ fontSize: 10, color: '#555', fontFamily: 'var(--arc-mono)' }}>
-          {turnNumber > 0 ? `turn ${turnNumber}` : 'ready'}
-        </span>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1, maxWidth: 220, minWidth: 0, textAlign: 'right', fontFamily: 'var(--arc-mono)' }}>
+          {!sessionStarted ? (
+            <>
+              <span style={{ fontSize: 10, fontWeight: 500, color: 'rgba(228,232,242,0.94)', letterSpacing: '0.04em' }}>Step {pillIndex + 1} of 3</span>
+              <span style={{ fontSize: 9, color: 'rgba(178,186,206,0.9)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 220 }}>{PILL_LABELS[pillIndex]}</span>
+            </>
+          ) : sessionComplete ? (
+            <>
+              <span style={{ fontSize: 10, fontWeight: 600, color: '#6EE7B7' }}>Session complete</span>
+              <span style={{ fontSize: 9, color: 'rgba(110,231,183,0.85)' }}>{journeyChapter(turnNumber, progressPercent, true)}</span>
+            </>
+          ) : (
+            <>
+              <span style={{ fontSize: 10, fontWeight: 500, color: 'rgba(228,232,242,0.94)' }}>Turn {turnNumber}</span>
+              <span style={{ fontSize: 9, color: 'rgba(178,186,206,0.88)' }}>{journeyChapter(turnNumber, progressPercent, false)}</span>
+            </>
+          )}
+        </div>
       </nav>
 
       <div className="design-main">
@@ -425,24 +525,50 @@ export default function DesignPage() {
           <div style={{ position: 'relative', width: 80, height: 80, flexShrink: 0 }}>
             <div style={{ position: 'absolute', inset: 0, background: STATE_GLOW[oriState], borderRadius: 12, transition: 'background 0.8s ease', pointerEvents: 'none' }} />
             <div style={{ position: 'absolute', inset: 0, borderRadius: 12, boxShadow: `inset 0 0 24px ${STATE_RING[oriState]}`, transition: 'box-shadow 0.8s ease', pointerEvents: 'none' }} />
-            <div style={{ position: 'relative', zIndex: 1, width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div className={showOriIntro ? 'design-ori-intro-once' : undefined} style={{ position: 'relative', zIndex: 1, width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 12 }}>
               <OriAvatar state={oriState} size={80} />
             </div>
           </div>
-          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 6 }}>
-            <span style={{ fontSize: 9, color: STATE_LABEL_COLOR[oriState], textTransform: 'uppercase' as const, letterSpacing: '0.1em', fontFamily: 'var(--arc-mono)' }}>
-              {sessionStarted ? oriState : 'ready'}
-            </span>
-            {sessionStarted && (
-              <div style={{ height: 3, width: '100%', maxWidth: 200, background: 'rgba(108,99,255,0.1)', borderRadius: 2, overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: `${progressPercent}%`, background: `linear-gradient(90deg, #6C63FF, ${currentProgressColor})`, borderRadius: 2, transition: 'width 0.8s ease, background 0.5s ease' }} />
+          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+              <span
+                aria-hidden
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: '50%',
+                  marginTop: 4,
+                  flexShrink: 0,
+                  background: STATE_LABEL_COLOR[oriState],
+                  boxShadow: `0 0 12px ${STATE_LABEL_COLOR[oriState]}66`,
+                }}
+              />
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.02em', color: sessionStarted ? STATE_LABEL_COLOR[oriState] : 'rgba(228,232,242,0.95)', fontFamily: 'var(--arc-font)', lineHeight: 1.25 }}>
+                  {sessionStarted ? STATE_DISPLAY_LABEL[oriState] : 'Your move'}
+                </div>
+                <div style={{ fontSize: 9, fontFamily: 'var(--arc-mono)', letterSpacing: '0.06em', color: 'rgba(176,184,204,0.82)', marginTop: 3, textTransform: 'uppercase' as const }}>
+                  {sessionStarted ? `Architecture · ${Math.round(progressPercent)}%` : 'Architecture unlocks as you answer'}
+                </div>
               </div>
-            )}
+            </div>
+            <div style={{ height: 4, width: '100%', maxWidth: 220, background: 'rgba(108,99,255,0.14)', borderRadius: 3, overflow: 'hidden' }}>
+              <div
+                style={{
+                  height: '100%',
+                  width: `${sessionStarted ? progressPercent : 0}%`,
+                  background: `linear-gradient(90deg, #6C63FF, ${currentProgressColor})`,
+                  borderRadius: 3,
+                  transition: 'width 0.8s ease, background 0.5s ease',
+                  boxShadow: sessionStarted && progressPercent > 0 ? '0 0 14px rgba(108,99,255,0.38)' : undefined,
+                }}
+              />
+            </div>
           </div>
         </div>
 
         <div className="design-chat-col" style={{ display: 'flex', flexDirection: 'column', borderRight: '1px solid rgba(108,99,255,0.08)', overflow: 'hidden', minHeight: 0 }}>
-          <div style={{ padding: '10px 14px', borderBottom: '1px solid rgba(108,99,255,0.08)', fontSize: 10, color: '#555', textTransform: 'uppercase' as const, letterSpacing: '0.08em', fontFamily: 'var(--arc-mono)', flexShrink: 0 }}>
+          <div style={{ padding: '10px 14px', borderBottom: '1px solid rgba(108,99,255,0.08)', fontSize: 10, color: 'rgba(176,184,204,0.82)', textTransform: 'uppercase' as const, letterSpacing: '0.08em', fontFamily: 'var(--arc-mono)', flexShrink: 0 }}>
             Conversation
           </div>
 
@@ -453,11 +579,11 @@ export default function DesignPage() {
                   <ArcMark size={22} />
                 </div>
                 <div>
-                  <p style={{ color: 'rgba(228,232,242,0.85)', fontSize: 14, lineHeight: 1.65, maxWidth: 260, margin: '0 0 6px' }}>
-                    Ori will interview you about your product and build your conversation architecture in real time.
+                  <p style={{ color: 'rgba(240,242,248,0.96)', fontSize: 15, fontWeight: 500, lineHeight: 1.45, maxWidth: 280, margin: '0 0 10px', letterSpacing: -0.2 }}>
+                    One question at a time. Your architecture fills in as you go.
                   </p>
-                  <p style={{ color: '#555', fontSize: 11, fontFamily: 'var(--arc-mono)', margin: 0 }}>
-                    One question per turn.
+                  <p style={{ color: 'rgba(176,184,204,0.88)', fontSize: 11, fontFamily: 'var(--arc-mono)', margin: 0, lineHeight: 1.55 }}>
+                    Intents, handoffs, entities, tone — captured live.
                   </p>
                 </div>
                 <button
@@ -497,19 +623,32 @@ export default function DesignPage() {
             )}
 
             {sessionComplete && (
-              <div style={{ background: 'rgba(52,211,153,0.07)', border: '1px solid rgba(52,211,153,0.2)', borderRadius: 10, padding: '14px 16px', marginTop: 8 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
-                  <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#34D399' }} />
-                  <p style={{ fontSize: 12, color: '#34D399', margin: 0, fontWeight: 500 }}>Architecture complete</p>
-                </div>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <div
+                style={{
+                  marginTop: 10,
+                  borderRadius: 14,
+                  padding: 2,
+                  background: 'linear-gradient(135deg, rgba(52,211,153,0.55), rgba(108,99,255,0.35), rgba(45,212,191,0.45))',
+                  boxShadow: '0 0 40px rgba(52,211,153,0.12), 0 12px 40px rgba(0,0,0,0.35)',
+                }}
+              >
+                <div style={{ background: 'linear-gradient(180deg, rgba(14,22,20,0.98) 0%, rgba(10,14,18,0.99) 100%)', borderRadius: 12, padding: '16px 16px 14px' }}>
+                  <p style={{ fontSize: 10, fontFamily: 'var(--arc-mono)', letterSpacing: '0.14em', textTransform: 'uppercase' as const, color: 'rgba(110,231,183,0.9)', margin: '0 0 6px' }}>Milestone</p>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                    <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#34D399', boxShadow: '0 0 16px rgba(52,211,153,0.65)' }} />
+                    <p style={{ fontSize: 16, color: 'rgba(240,252,246,0.98)', margin: 0, fontWeight: 600, letterSpacing: -0.3 }}>Your architecture is live</p>
+                  </div>
+                  <p style={{ fontSize: 12, color: 'rgba(176,184,204,0.88)', margin: '0 0 14px', lineHeight: 1.55 }}>Export it, share it, or drop it into your build — you own every line.</p>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   <button
-                    onClick={copyMarkdown}
+                    type="button"
+                    onClick={() => void copyMarkdown()}
                     style={{ fontSize: 11, color: '#A5A0FF', background: 'rgba(108,99,255,0.1)', border: '1px solid rgba(108,99,255,0.2)', borderRadius: 6, padding: '6px 12px', cursor: 'pointer', fontFamily: 'var(--arc-mono)' }}
                   >
                     Copy markdown
                   </button>
                   <button
+                    type="button"
                     onClick={downloadMarkdown}
                     style={{ fontSize: 11, color: '#A5A0FF', background: 'rgba(108,99,255,0.1)', border: '1px solid rgba(108,99,255,0.2)', borderRadius: 6, padding: '6px 12px', cursor: 'pointer', fontFamily: 'var(--arc-mono)' }}
                   >
@@ -523,6 +662,7 @@ export default function DesignPage() {
                       Share link →
                     </a>
                   )}
+                  </div>
                 </div>
               </div>
             )}
@@ -555,7 +695,7 @@ export default function DesignPage() {
               }}
               rows={1}
               disabled={isLoading || sessionComplete || !sessionStarted}
-              placeholder={!sessionStarted ? 'Click Meet Ori to begin...' : sessionComplete ? 'Architecture complete' : 'Reply to Ori...'}
+              placeholder={!sessionStarted ? 'Tap Meet Ori below, then reply here…' : sessionComplete ? 'Session complete — export above' : 'Reply to Ori…'}
               className="design-composer-textarea"
               style={{ flex: 1, minHeight: 40, maxHeight: 168, background: 'rgba(28,35,51,0.7)', border: '1px solid rgba(108,99,255,0.15)', borderRadius: 7, padding: '8px 12px', fontSize: 13, lineHeight: 1.45, color: 'rgba(228,232,242,0.95)', fontFamily: 'var(--arc-font)', outline: 'none', transition: 'border-color 0.2s ease, box-shadow 0.2s ease', opacity: sessionComplete ? 0.5 : 1, resize: 'none', overflowY: 'auto', alignSelf: 'stretch' }}
               onFocus={(e) => { e.target.style.borderColor = 'rgba(108,99,255,0.5)'; e.target.style.boxShadow = '0 0 0 3px rgba(108,99,255,0.12)' }}
@@ -576,25 +716,34 @@ export default function DesignPage() {
           <div style={{ position: 'absolute', inset: 0, boxShadow: `inset 0 0 60px ${STATE_RING[oriState]}`, transition: 'box-shadow 0.8s ease', pointerEvents: 'none' }} />
 
           <span style={{ fontSize: 9, color: STATE_LABEL_COLOR[oriState], textTransform: 'uppercase' as const, letterSpacing: '0.1em', fontFamily: 'var(--arc-mono)', padding: '12px 0 0', position: 'relative', zIndex: 1, transition: 'color 0.4s ease' }}>
-            {sessionStarted ? oriState : ''}
+            {sessionStarted ? STATE_DISPLAY_LABEL[oriState] : 'Meet Ori to begin'}
           </span>
 
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 12, position: 'relative', zIndex: 1, minHeight: 0 }}>
+          <div className={showOriIntro ? 'design-ori-intro-once' : undefined} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 12, position: 'relative', zIndex: 1, minHeight: 0 }}>
             <OriAvatar state={oriState} size={148} />
           </div>
 
-          <div style={{ padding: '0 12px 14px', textAlign: 'center', position: 'relative', zIndex: 1 }}>
-            <p style={{ fontSize: 10, color: '#555', fontFamily: 'var(--arc-mono)', margin: '0 0 8px', letterSpacing: '0.06em' }}>Ori</p>
-            {sessionStarted && (
-              <div style={{ height: 2, width: 120, background: 'rgba(108,99,255,0.1)', borderRadius: 2, overflow: 'hidden', margin: '0 auto' }}>
-                <div style={{ height: '100%', width: `${progressPercent}%`, background: `linear-gradient(90deg, #6C63FF, ${currentProgressColor})`, borderRadius: 2, transition: 'width 0.8s ease, background 0.5s ease' }} />
-              </div>
-            )}
+          <div style={{ padding: '0 12px 14px', textAlign: 'center', position: 'relative', zIndex: 1, width: '100%' }}>
+            <p style={{ fontSize: 9, fontFamily: 'var(--arc-mono)', margin: '0 0 8px', letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: 'rgba(176,184,204,0.82)' }}>
+              {sessionStarted ? `Architecture · ${Math.round(progressPercent)}%` : 'Architecture · 0% — meet Ori to unlock'}
+            </p>
+            <div style={{ height: 3, width: '100%', maxWidth: 140, background: 'rgba(108,99,255,0.14)', borderRadius: 3, overflow: 'hidden', margin: '0 auto' }}>
+              <div
+                style={{
+                  height: '100%',
+                  width: `${sessionStarted ? progressPercent : 0}%`,
+                  background: `linear-gradient(90deg, #6C63FF, ${currentProgressColor})`,
+                  borderRadius: 3,
+                  transition: 'width 0.8s ease, background 0.5s ease',
+                  boxShadow: sessionStarted && progressPercent > 0 ? '0 0 14px rgba(108,99,255,0.35)' : undefined,
+                }}
+              />
+            </div>
           </div>
         </div>
 
         <div className="design-arch-desktop-col" style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-          <ArchitecturePanel architecture={architecture} progressPercent={progressPercent} />
+          <ArchitecturePanel architecture={architecture} progressPercent={progressPercent} pulseSection={pulseSection} />
         </div>
       </div>
 
@@ -625,7 +774,7 @@ export default function DesignPage() {
               </button>
             </div>
             <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
-              <ArchitecturePanel architecture={architecture} progressPercent={progressPercent} />
+              <ArchitecturePanel architecture={architecture} progressPercent={progressPercent} pulseSection={pulseSection} />
             </div>
           </div>
         </div>

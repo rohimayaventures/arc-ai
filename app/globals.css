@@ -54,3 +54,41 @@ body {
   scrollbar-width: thin;
   scrollbar-color: rgba(108,99,255,0.25) transparent;
 }
+
+@keyframes design-ori-intro {
+  0% {
+    transform: scale(0.94);
+    opacity: 0.88;
+  }
+  45% {
+    transform: scale(1.05);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.design-ori-intro-once {
+  animation: design-ori-intro 1.35s cubic-bezier(0.22, 1, 0.36, 1) 1 forwards;
+}
+
+@keyframes design-arch-reveal {
+  0% {
+    box-shadow: 0 0 0 0 rgba(108, 99, 255, 0);
+    filter: brightness(1);
+  }
+  12% {
+    box-shadow: 0 0 36px 8px rgba(108, 99, 255, 0.32);
+    filter: brightness(1.14);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(108, 99, 255, 0);
+    filter: brightness(1);
+  }
+}
+
+.design-arch-reveal-pulse {
+  animation: design-arch-reveal 2.2s ease-out 1 forwards;
+}

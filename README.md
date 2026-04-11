@@ -1,36 +1,77 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Arc
 
-## Getting Started
+**Conversation design before code.** Arc is a Next.js app where **Ori** interviews you in turns, captures **intent taxonomy**, **escalation flows**, **entity schema**, and **tone guide** into a live **conversation architecture** you can export as Markdown.
 
-First, run the development server:
+## Stack
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+- **Next.js** 16 (App Router, Turbopack in dev)
+- **React** 19 · **TypeScript**
+- **Anthropic** (`@anthropic-ai/sdk`) for `/api/chat`
+- **Supabase** (`@supabase/supabase-js`) for saved sessions (`/api/session`, `arc_sessions` table)
+- **Tailwind** 4 (PostCSS) · global tokens in `app/globals.css` (Space Grotesk + DM Mono)
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Routes
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Path | Purpose |
+|------|--------|
+| `/` | Marketing landing (scroll narrative + Ori-style canvas hero) |
+| `/design` | Design workspace: chat with Ori, architecture panel, mobile architecture sheet |
+| `/session/[slug]` | Read-only shared session from Supabase |
+| `POST /api/chat` | Ori turn: messages in → structured `OriTurn` (message + `architectureDelta` + progress) |
+| `POST /api/session` | Persist completed session → returns `shareUrl` when configured |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Setup
 
-## Learn More
+1. **Clone and install**
 
-To learn more about Next.js, take a look at the following resources:
+   ```bash
+   npm install
+   ```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+2. **Environment** — create `.env.local` in the project root:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+   ```bash
+   # Required for Ori (design page + API)
+   ANTHROPIC_API_KEY=sk-ant-...
 
-## Deploy on Vercel
+   # Required for session save + share links (optional for local chat-only testing)
+   NEXT_PUBLIC_SUPABASE_URL=https://xxxx.supabase.co
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
+   ```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+   Supabase expects a table such as **`arc_sessions`** (see `app/api/session/route.ts` for columns). Without Supabase, chat still works; **session complete** may not persist or return a share URL.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+3. **Run dev**
+
+   ```bash
+   npm run dev
+   ```
+
+   Open [http://localhost:3000](http://localhost:3000) for the landing page and [http://localhost:3000/design](http://localhost:3000/design) for the Ori session UI.
+
+## Scripts
+
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Next dev server (default port **3000**) |
+| `npm run build` | Production build |
+| `npm run start` | Start production server (after `build`) |
+| `npm run lint` | ESLint (`eslint-config-next`) |
+
+## Project layout (high level)
+
+- `app/page.tsx` — Landing
+- `app/design/page.tsx` — Design session UI + atmospheric background canvas
+- `app/api/chat/route.ts` — Anthropic + Ori system prompt / JSON turn
+- `app/api/session/route.ts` — Supabase insert for completed sessions
+- `components/OriAvatar.tsx` — Reusable stateful Ori canvas
+- `components/ArchitecturePanel.tsx` — Four architecture cards + progress
+- `lib/oriSystemPrompt.ts`, `lib/types.ts`, `lib/oriMessage.ts` — Prompts and shared types
+
+## Deploy
+
+Any Node host that supports Next.js 16 works (e.g. [Vercel](https://vercel.com)). Set the same environment variables in the hosting dashboard.
+
+---
+
+Built with Next.js. Product copy and flows evolve in `app/` and `components/`.

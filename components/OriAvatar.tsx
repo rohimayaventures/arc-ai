@@ -495,7 +495,7 @@ export default function OriAvatar({ state = 'idle', size = 200 }: OriAvatarProps
     return () => {
       cancelAnimationFrame(animFrame)
     }
-  }, [size])
+  }, [logicalSize])
 
   return (
     <canvas

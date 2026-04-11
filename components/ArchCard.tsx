@@ -19,6 +19,8 @@ interface ToneCard {
 
 type ArchCardProps = (IntentCard | EscalationCard | EntityCard | ToneCard) & {
   populated: boolean
+  /** First-time fill: brief glow so the section feels “stamped in”. */
+  revealPulse?: boolean
 }
 
 const CONFIG: Record<string, { label: string; color: string; bg: string; border: string }> = {
@@ -29,11 +31,12 @@ const CONFIG: Record<string, { label: string; color: string; bg: string; border:
 }
 
 export default function ArchCard(props: ArchCardProps) {
-  const { type, populated } = props
+  const { type, populated, revealPulse } = props
   const cfg = CONFIG[type]
 
   return (
     <div
+      className={revealPulse ? 'design-arch-reveal-pulse' : undefined}
       style={{
         background: populated ? cfg.bg : 'rgba(10,12,18,0.4)',
         border: populated
@@ -63,7 +66,7 @@ export default function ArchCard(props: ArchCardProps) {
       </div>
 
       {!populated && (
-        <p style={{ fontSize: 11, color: '#444', fontStyle: 'italic' }}>
+        <p style={{ fontSize: 11, color: 'rgba(148,156,176,0.72)', fontStyle: 'italic' }}>
           Waiting for your answer...
         </p>
       )}
