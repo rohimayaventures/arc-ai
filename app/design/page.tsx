@@ -1,19 +1,10 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
+import ArcMark from '@/components/ArcMark'
 import OriAvatar, { OriState } from '@/components/OriAvatar'
 import ArchitecturePanel from '@/components/ArchitecturePanel'
 import { ArchitectureDelta, ChatMessage, OriTurn } from '@/lib/types'
-
-function ArcMark({ size = 24 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 28 28" fill="none">
-      <path d="M4 24 L14 4 L24 24" stroke="#6C63FF" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M8 17 Q14 11 20 17" stroke="#A5A0FF" strokeWidth="1.4" strokeLinecap="round" fill="none" />
-      <circle cx="14" cy="14" r="1.5" fill="#6C63FF" opacity="0.7" />
-    </svg>
-  )
-}
 
 const PILL_LABELS = ['Tell us about you', 'Design your system', 'Architecture ready']
 
@@ -459,7 +450,7 @@ export default function DesignPage() {
             {sessionStarted ? oriState : ''}
           </span>
 
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 12, position: 'relative', zIndex: 1 }}>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 12, position: 'relative', zIndex: 1, minHeight: 0 }}>
             <OriAvatar state={oriState} size={148} />
           </div>
 
